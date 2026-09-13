@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sheraton Restaurant — AI Voice Ordering Kiosk</title>
+  <meta name="description" content="Upscale voice-activated restaurant ordering kiosk powered by Gemini 3.1 Flash Live with real-time order tracking.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <!-- Ambient Warm Amber Glows -->
+  <div class="ambient-glow glow-top"></div>
+  <div class="ambient-glow glow-bottom"></div>
+
+  <div class="app-layout">
+    <!-- Top Global Header -->
+    <header class="kiosk-header">
+      <div class="brand-group">
+        <div class="brand-badge">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 4V2"></path>
+            <path d="M4 18h16"></path>
+            <path d="M4 18a8 8 0 0 1 16 0"></path>
+            <path d="M2 20h20"></path>
+          </svg>
+        </div>
+        <div class="brand-info">
+          <h1 class="brand-title">Sheraton Restaurant</h1>
+          <span class="brand-subtitle">AI Voice Ordering Kiosk &bull; Powered by Gemini Live</span>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <!-- Voice Selector -->
+        <div class="voice-selector-wrap">
+          <label for="voice-select" class="selector-label">Voice:</label>
+          <select id="voice-select" class="kiosk-select">
+            <option value="Charon">Charon (Calm & Deep)</option>
+            <option value="Aoede">Aoede (Warm & Lively)</option>
+            <option value="Puck">Puck (Playful & Upbeat)</option>
+            <option value="Fenrir">Fenrir (Bold & Authoritative)</option>
+            <option value="Kore">Kore (Gentle & Soothing)</option>
+          </select>
+        </div>
+
+        <!-- System Prompt Modal Button -->
+        <button id="btn-prompt-modal" class="kiosk-btn-icon" title="Customize Receptionist Prompt">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1Z"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Kiosk Body (3 Columns) -->
+    <main class="kiosk-grid">
+      <!-- COLUMN 1: Fixed Restaurant Menu Display -->
+      <section class="kiosk-column menu-column" aria-label="Restaurant Menu">
+        <div class="column-header">
+          <div class="column-title-wrap">
+            <span class="column-svg-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+                <path d="M9 12h6"></path>
+                <path d="M9 16h6"></path>
+              </svg>
+            </span>
+            <h2>Our Menu</h2>
+          </div>
+          <div class="category-tabs" id="category-tabs">
+            <button class="tab-btn active" data-category="all">All</button>
+            <button class="tab-btn" data-category="Mains">Mains</button>
+            <button class="tab-btn" data-category="Sides">Sides</button>
+            <button class="tab-btn" data-category="Beverages">Drinks</button>
+            <button class="tab-btn" data-category="Desserts">Desserts</button>
+          </div>
+        </div>
+
+        <div class="menu-items-scroll" id="menu-container">
+          <!-- Dynamically populated from API with SVG category icons -->
+          <div class="menu-loading">
+            <div class="spinner"></div>
+            <p>Loading menu items...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- COLUMN 2: AI Voice Assistant Stage -->
+      <section class="kiosk-column assistant-column" aria-label="Voice Assistant">
+        <!-- Live Status Pill -->
+        <div id="status-pill" class="status-pill status-ready">
+          <span class="status-dot"></span>
+          <span id="status-text">Click "Start Order" to begin speaking</span>
+        </div>
+
+        <!-- 3D-styled Audio Visualizer Stage -->
+        <div class="visualizer-stage">
+          <canvas id="visualizer-canvas" width="500" height="500"></canvas>
+          <div class="orb-core"></div>
+        </div>
+
+        <!-- Live Streaming Captions (Customer & Voice Agent) -->
+        <div class="live-caption-box">
+          <div class="caption-bubble" id="caption-box">
+            <div class="caption-tag" id="caption-tag">Receptionist</div>
+            <p id="live-caption" class="caption-content">"Welcome to Sheraton Restaurant. Press Start Order and tell me what you'd like today!"</p>
+          </div>
+        </div>
+
+        <!-- Voice Order Controls Deck -->
+        <div class="assistant-controls">
+          <!-- Start Order Button has NO icons as required -->
+          <button id="btn-call" class="kiosk-btn btn-call-primary" title="Start / Stop Voice Ordering Session">
+            <span class="call-pulse"></span>
+            <span id="label-call">Start Order</span>
+          </button>
+
+          <button id="btn-mute" class="kiosk-btn btn-mute" disabled title="Mute / Unmute Microphone">
+            <svg id="icon-mic-on" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="22"/>
+            </svg>
+            <svg id="icon-mic-off" class="hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="2" y1="2" x2="22" y2="22"/>
+              <path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2"/>
+              <path d="M5 10v2a7 7 0 0 0 12 5"/>
+              <path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"/>
+              <path d="M9 9v3a3 3 0 0 0 5.12 2.12"/>
+              <line x1="12" y1="19" x2="12" y2="22"/>
+            </svg>
+            <span id="label-mute">Mute</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- COLUMN 3: Current Order Ticket -->
+      <section class="kiosk-column order-column" aria-label="Current Order Ticket">
+        <div class="column-header">
+          <div class="column-title-wrap">
+            <span class="column-svg-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"></path>
+                <path d="M8 7h8"></path>
+                <path d="M8 11h8"></path>
+                <path d="M8 15h5"></path>
+              </svg>
+            </span>
+            <h2>Your Order</h2>
+            <span id="order-badge" class="item-count-badge">0 items</span>
+          </div>
+          <button id="btn-clear-order" class="btn-clear" title="Clear all items in order" style="display: none;">Clear</button>
+        </div>
+
+        <!-- Order Items Ticket List -->
+        <div class="order-items-scroll" id="order-items-list">
+          <div class="order-empty-state" id="order-empty-state">
+            <div class="empty-icon-wrap">
+              <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 4V2"></path>
+                <path d="M4 18h16"></path>
+                <path d="M4 18a8 8 0 0 1 16 0"></path>
+                <path d="M2 20h20"></path>
+              </svg>
+            </div>
+            <h3>No items added yet</h3>
+            <p>Speak to our receptionist or click items on the menu to build your order.</p>
+            <div class="speech-hint">
+              <span class="hint-title">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M9 18h6"></path>
+                  <path d="M10 22h4"></path>
+                  <path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"></path>
+                </svg>
+                Try saying:
+              </span>
+              <code>"I'd like the Sheraton Burger and Fries"</code>
+            </div>
+          </div>
+        </div>
+
+        <!-- Order Totals & Checkout -->
+        <div class="order-checkout-deck">
+          <div class="order-math-lines">
+            <div class="math-row">
+              <span class="math-label">Subtotal</span>
+              <span class="math-value" id="order-subtotal">$0.00</span>
+            </div>
+            <div class="math-row">
+              <span class="math-label">Tax (5%)</span>
+              <span class="math-value" id="order-tax">$0.00</span>
+            </div>
+            <div class="math-row math-total">
+              <span class="math-label">Total</span>
+              <span class="math-value" id="order-total">$0.00</span>
+            </div>
+          </div>
+
+          <button id="btn-place-order" class="btn-place-order" disabled>
+            <span class="btn-text">Confirm & Place Order</span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <!-- System Prompt Customization Modal -->
+    <div id="prompt-modal" class="modal-overlay hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>Receptionist System Prompt & Persona</h3>
+          <button id="btn-close-modal" class="btn-close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-desc">
+            Define how the receptionist greets customers, handles recommendations, and manages orders. Saved to <code>system_prompt.txt</code>.
+          </p>
+          <textarea id="prompt-textarea" rows="9" spellcheck="false"></textarea>
+        </div>
+        <div class="modal-footer">
+          <button id="btn-cancel-modal" class="kiosk-btn btn-secondary">Cancel</button>
+          <button id="btn-save-prompt" class="kiosk-btn btn-primary-gold">Save & Apply</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Order Placed Success Modal -->
+    <div id="success-modal" class="modal-overlay hidden">
+      <div class="modal-card success-card">
+        <div class="success-icon-wrap">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.5">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </svg>
+        </div>
+        <h3 class="success-title">Order Received!</h3>
+        <p class="success-order-id">Order Ticket: <strong id="success-ticket-id">#SH-4821</strong></p>
+        <p class="success-desc">The kitchen has received your order and is preparing your meal with care.</p>
+        
+        <div class="success-receipt" id="success-receipt-summary">
+          <!-- Summary inserted here -->
+        </div>
+
+        <button id="btn-new-order" class="kiosk-btn btn-primary-gold btn-full">Start New Order</button>
+      </div>
+    </div>
+
+    <!-- Toast Notification Banner -->
+    <div id="toast" class="toast hidden"></div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

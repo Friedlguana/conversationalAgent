@@ -171,20 +171,50 @@ Keep responses concise (1 to 2 sentences max) for spoken conversation.
 
 ## 🎙️ Running the Agent
 
-With your virtual environment activated:
+### 🌐 Mode 1: Modern Web UI (Default)
+Run the web application server:
 
 ```bash
 python agent.py
+# or: python server.py
 ```
 
-Speak into your microphone naturally. Whenever you want to exit, press **`Ctrl + C`**.
+Then open your browser at **`http://localhost:8080`**.
+
+#### Web UI Highlights:
+- **Interactive 3D Visualizer**: Reactive canvas orb and waveform responding dynamically to both microphone speech and agent voice.
+- **Voice Selector Dropdown**: Switch effortlessly between *Charon*, *Aoede*, *Puck*, *Fenrir*, and *Kore*.
+- **Live System Prompt Modal**: Edit agent persona and rules on the fly and save directly to `system_prompt.txt`.
+- **Slide-Over Transcript Drawer**: Review complete turn-by-turn conversation logs with timestamps.
+- **Hardware Echo Cancellation**: Built-in browser audio processing for clean, feedback-free acoustics.
+- **Gapless 24kHz Audio Playback**: Sub-second speech response scheduling via Web Audio API.
 
 ---
 
-## 🧪 Testing & Diagnostics
+### 💻 Mode 2: Terminal CLI (Backup Mode)
+If you prefer running directly in your terminal with PyAudio:
 
-To run the automated multi-turn latency verification test:
+```bash
+python agent.py --cli
+# or: python cli_agent.py
+```
+
+Speak into your microphone naturally. Press **`Ctrl + C`** anytime to exit.
+
+---
+
+## 🧪 Testing & Verification
+
+### 1. End-to-End Web UI & WebSocket Verification
+Runs a full automated suite verifying HTTP routes, static assets, configuration, prompt persistence, binary PCM audio streaming, and multi-turn live conversation:
+
+```bash
+python test_web_e2e.py
+```
+
+### 2. Multi-Turn Latency Benchmark
+Tests consecutive conversational turns and verifies sub-second Time-To-First-Audio (~500ms TTFA):
+
 ```bash
 python test_gemini_multiturn.py
 ```
-*(Tests consecutive conversational turns and verifies Time-To-First-Audio latency).*
