@@ -1,5 +1,5 @@
 /**
- * app.js - Sheraton Restaurant AI Voice Ordering Kiosk
+ * app.js - The Sheraton AI Voice Ordering Kiosk
  * Real-time full duplex Web Audio API streaming with Google Gemini 3.1 Flash Live.
  * Features native tool calling for order tracking and arithmetic calculation (5% tax),
  * live audio visualizer (amber theme), SVG icons, and bulletproof audio reconnection.
@@ -88,9 +88,10 @@ let scriptProcessor = null;
 let analyserIn = null;
 let analyserOut = null;
 
-// Audio scheduling jitter buffer
+// Audio scheduling jitter buffer & pre-roll audio buffer
 let scheduledPlaybackTime = 0;
 let activeAudioNodes = [];
+let preRollBuffer = [];
 let currentAgentTurnText = "";
 
 // Visualizer Particles (Amber theme)
@@ -217,7 +218,7 @@ function renderMenu(categoryFilter = 'all') {
             <p class="menu-item-desc">${escapeHtml(item.description || '')}</p>
           </div>
           <div class="menu-item-action">
-            <span class="menu-item-price">$${item.price.toFixed(2)}</span>
+            <span class="menu-item-price">₹${item.price.toFixed(2)}</span>
             <button class="btn-add-item" onclick="event.stopPropagation(); addItemToOrder('${item.id}', 1)" title="Add to Order">+</button>
           </div>
         </div>
@@ -316,14 +317,17 @@ function addItemToOrder(itemIdentifier, quantity = 1, notes = "") {
     menuItem = {
       id: 'item-' + Date.now(),
       name: itemIdentifier,
-      price: 9.99,
+      price: 450.0,
       description: 'Special Order',
     };
   }
 
   const existing = orderItems.find(i => i.id === menuItem.id);
   if (existing) {
-    existing.quantity += Math.max(1, parseInt(quantity) || 1);
+    const qtyToAdd = parseInt(quantity);
+    if (!isNaN(qtyToAdd) && qtyToAdd > 0) {
+      existing.quantity += qtyToAdd;
+    }
     if (notes) existing.notes = notes;
   } else {
     orderItems.push({
@@ -337,7 +341,27 @@ function addItemToOrder(itemIdentifier, quantity = 1, notes = "") {
 
   renderOrder(menuItem.id);
   syncOrderWithServer();
-  showToast(`Added ${quantity > 1 ? quantity + 'x ' : ''}${menuItem.name} to order`);
+  showToast(`Added ${quantity > 1 ? quantity + 'x ' : ''}${menuItem.name}${notes ? ` ("${notes}")` : ''} to order`);
+}
+
+function updateItemNotes(itemIdentifier, notes = "") {
+  let itemIndex = -1;
+  const targetName = (typeof itemIdentifier === 'string' ? itemIdentifier : '').trim().toLowerCase();
+
+  itemIndex = orderItems.findIndex(i => {
+    if (i.id === itemIdentifier) return true;
+    const nameLower = i.name.toLowerCase();
+    return nameLower === targetName || nameLower.includes(targetName) || targetName.includes(nameLower);
+  });
+
+  if (itemIndex !== -1) {
+    orderItems[itemIndex].notes = notes;
+    renderOrder(orderItems[itemIndex].id);
+    syncOrderWithServer();
+    showToast(`Note updated for ${orderItems[itemIndex].name}: "${notes}"`);
+  } else {
+    addItemToOrder(itemIdentifier, 1, notes);
+  }
 }
 
 function removeItemFromOrder(itemIdentifier, quantity = 0) {
@@ -389,9 +413,9 @@ function renderOrder(highlightItemId = null) {
     const existingCards = orderItemsList.querySelectorAll('.order-ticket-item');
     existingCards.forEach(c => c.remove());
 
-    orderSubtotalEl.textContent = '$0.00';
-    orderTaxEl.textContent = '$0.00';
-    orderTotalEl.textContent = '$0.00';
+    orderSubtotalEl.textContent = '₹0.00';
+    orderTaxEl.textContent = '₹0.00';
+    orderTotalEl.textContent = '₹0.00';
     return;
   }
 
@@ -415,7 +439,7 @@ function renderOrder(highlightItemId = null) {
     itemCard.innerHTML = `
       <div class="ticket-item-details">
         <span class="ticket-item-name">${escapeHtml(item.name)}</span>
-        <span class="ticket-item-price-unit">$${item.price.toFixed(2)} each</span>
+        <span class="ticket-item-price-unit">₹${item.price.toFixed(2)} each</span>
         ${item.notes ? `<span class="ticket-item-notes">"${escapeHtml(item.notes)}"</span>` : ''}
       </div>
 
@@ -425,7 +449,7 @@ function renderOrder(highlightItemId = null) {
         <button class="qty-btn" onclick="updateItemQuantity('${item.id}', 1)" title="Increase">&plus;</button>
       </div>
 
-      <span class="ticket-item-subtotal">$${itemSubtotal.toFixed(2)}</span>
+      <span class="ticket-item-subtotal">₹${itemSubtotal.toFixed(2)}</span>
 
       <button class="ticket-item-remove" onclick="removeItemFromOrder('${item.id}', 0)" title="Remove item">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -438,13 +462,13 @@ function renderOrder(highlightItemId = null) {
     orderItemsList.appendChild(itemCard);
   });
 
-  // Calculate Math with exact 5% tax
+  // Calculate Math with exact 5% tax (GST)
   const tax = subtotal * taxRate;
   const total = subtotal + tax;
 
-  orderSubtotalEl.textContent = `$${subtotal.toFixed(2)}`;
-  orderTaxEl.textContent = `$${tax.toFixed(2)}`;
-  orderTotalEl.textContent = `$${total.toFixed(2)}`;
+  orderSubtotalEl.textContent = `₹${subtotal.toFixed(2)}`;
+  orderTaxEl.textContent = `₹${tax.toFixed(2)}`;
+  orderTotalEl.textContent = `₹${total.toFixed(2)}`;
 
   if (highlightItemId) {
     setTimeout(() => {
@@ -483,7 +507,7 @@ function displayOrderSuccess(orderId, bill) {
       receiptHtml += `
         <div class="receipt-row">
           <span>${i.quantity}x ${escapeHtml(i.name)}</span>
-          <span>$${(i.price * i.quantity).toFixed(2)}</span>
+          <span>₹${(i.price * i.quantity).toFixed(2)}</span>
         </div>
       `;
     });
@@ -497,11 +521,11 @@ function displayOrderSuccess(orderId, bill) {
     });
   }
 
-  const grandTotalStr = bill ? `$${bill.grand_total.toFixed(2)}` : orderTotalEl.textContent;
+  const grandTotalStr = bill ? `₹${bill.grand_total.toFixed(2)}` : orderTotalEl.textContent;
   receiptHtml += `
     <div class="receipt-row bold">
-      <span>Total (incl. 5% tax)</span>
-      <span>${grandTotalStr}</span>
+      <span>Total (incl. 5% GST)</span>
+      <span>${grandTotalStr.startsWith('₹') ? grandTotalStr : '₹' + grandTotalStr}</span>
     </div>
   `;
 
@@ -541,6 +565,28 @@ function playConfirmationChime() {
       gain.connect(ctxChime.destination);
       osc.start(now + idx * 0.08);
       osc.stop(now + idx * 0.08 + 0.6);
+    });
+  } catch (e) {}
+}
+
+function playReadyChime() {
+  try {
+    const ctxChime = new (window.AudioContext || window.webkitAudioContext)();
+    const now = ctxChime.currentTime;
+    [587.33, 880.00].forEach((freq, idx) => {
+      const osc = ctxChime.createOscillator();
+      const gain = ctxChime.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now + idx * 0.09);
+
+      gain.gain.setValueAtTime(0.001, now + idx * 0.09);
+      gain.gain.exponentialRampToValueAtTime(0.12, now + idx * 0.09 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.09 + 0.35);
+
+      osc.connect(gain);
+      gain.connect(ctxChime.destination);
+      osc.start(now + idx * 0.09);
+      osc.stop(now + idx * 0.09 + 0.35);
     });
   } catch (e) {}
 }
@@ -667,10 +713,16 @@ function handleServerToolCalls(calls, bill) {
 
     if (name === 'add_to_order') {
       const itemName = args.item_name || args.name || "Special Item";
-      const quantity = args.quantity || 1;
+      const quantity = args.quantity !== undefined ? args.quantity : 1;
       const notes = args.notes || "";
       addItemToOrder(itemName, quantity, notes);
-      setStatus('status-order-updated', `Added ${itemName} to your ticket`);
+      setStatus('status-order-updated', `Added ${itemName}${notes ? ` ("${notes}")` : ''} to your ticket`);
+
+    } else if (name === 'update_item_notes') {
+      const itemName = args.item_name || args.name || "";
+      const notes = args.notes || "";
+      updateItemNotes(itemName, notes);
+      setStatus('status-order-updated', `Updated notes for ${itemName}`);
 
     } else if (name === 'remove_from_order') {
       const itemName = args.item_name || args.name || "";
@@ -684,8 +736,8 @@ function handleServerToolCalls(calls, bill) {
 
     } else if (name === 'calculate_bill') {
       // Visual feedback when arithmetic tool is invoked
-      const totalStr = bill ? `$${bill.grand_total.toFixed(2)}` : orderTotalEl.textContent;
-      setStatus('status-order-updated', `Bill calculated: ${totalStr} (5% tax incl.)`);
+      const totalStr = bill ? `₹${bill.grand_total.toFixed(2)}` : orderTotalEl.textContent;
+      setStatus('status-order-updated', `Bill calculated: ${totalStr} (5% GST incl.)`);
       showToast(`Total calculated: ${totalStr}`);
 
       // Flash highlight on the checkout deck
@@ -704,9 +756,9 @@ function handleServerToolCalls(calls, bill) {
 
   // If server sent exact bill calculation, sync directly with displayed totals
   if (bill && bill.subtotal !== undefined) {
-    orderSubtotalEl.textContent = `$${bill.subtotal.toFixed(2)}`;
-    orderTaxEl.textContent = `$${bill.tax.toFixed(2)}`;
-    orderTotalEl.textContent = `$${bill.grand_total.toFixed(2)}`;
+    orderSubtotalEl.textContent = `₹${bill.subtotal.toFixed(2)}`;
+    orderTaxEl.textContent = `₹${bill.tax.toFixed(2)}`;
+    orderTotalEl.textContent = `₹${bill.grand_total.toFixed(2)}`;
   }
 
   setTimeout(() => {
@@ -723,9 +775,12 @@ function handleServerToolCalls(calls, bill) {
 async function startSession() {
   if (isConnected || isConnecting) return;
   isConnecting = true;
+  isConnected = false;
 
-  setStatus('status-ready', 'Requesting microphone access...');
   btnCall.disabled = true;
+  btnCall.classList.add('connecting');
+  labelCall.textContent = 'Connecting...';
+  setStatus('status-connecting', 'Connecting to The Sheraton Receptionist...');
 
   // Ensure any previous session audio and sockets are completely cleanly released
   stopAllAgentAudio();
@@ -743,6 +798,7 @@ async function startSession() {
   // RESET TIMING AND NODES UPON START
   scheduledPlaybackTime = 0;
   activeAudioNodes = [];
+  preRollBuffer = [];
 
   try {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -777,14 +833,24 @@ async function startSession() {
     scriptProcessor.connect(audioContextIn.destination);
 
     scriptProcessor.onaudioprocess = (e) => {
-      if (!isConnected || isMuted || !ws || ws.readyState !== WebSocket.OPEN) return;
+      if (isMuted || !ws || ws.readyState !== WebSocket.OPEN) return;
+      const inputChannel = e.inputBuffer.getChannelData(0);
+
+      // Pre-roll audio buffer: if customer speaks while Gemini Live session is handshaking,
+      // preserve the frames in a ring buffer and flush them immediately once connected
+      if (isConnecting) {
+        const pcm16Buffer = downsampleTo16k(inputChannel, audioContextIn.sampleRate);
+        preRollBuffer.push(pcm16Buffer);
+        if (preRollBuffer.length > 8) preRollBuffer.shift();
+        return;
+      }
+
+      if (!isConnected) return;
 
       // Echo suppression: prevent speaker audio from bleeding into microphone and triggering
       // self-interruption or secondary Gemini responses while the agent is speaking.
       // If customer wants to speak over, user speech with normal volume passes through,
       // but low-to-medium ambient/speaker bleed is gated out.
-      const inputChannel = e.inputBuffer.getChannelData(0);
-
       if (isAgentSpeaking) {
         // Calculate RMS of incoming mic frame
         let sumSq = 0;
@@ -806,29 +872,12 @@ async function startSession() {
     const selectedVoice = voiceSelect.value || 'Charon';
     const wsUrl = `${protocol}//${window.location.host}/ws?voice=${encodeURIComponent(selectedVoice)}`;
 
-    setStatus('status-ready', `Connecting to Sheraton Receptionist (${selectedVoice})...`);
     ws = new WebSocket(wsUrl);
     ws.binaryType = 'arraybuffer';
 
     ws.onopen = () => {
-      isConnected = true;
-      isConnecting = false;
-      btnCall.disabled = false;
-      btnCall.classList.add('in-call');
-
-      // Start Order button has NO icons, text only
-      labelCall.textContent = 'End Order';
-
-      btnMute.disabled = false;
-
-      // Reset playback time right when connected
-      scheduledPlaybackTime = audioContextOut ? audioContextOut.currentTime : 0;
-
-      setStatus('status-listening', 'Listening to you... Speak now!');
-      updateCaption('assistant', "Connected! How may I take your order today?");
-      showToast(`Connected to Sheraton Receptionist (${selectedVoice})`);
-
-      // Sync existing order items to server session
+      // WebSocket open with backend; awaiting Gemini Live session readiness confirmation
+      setStatus('status-connecting', 'Securing voice line with Receptionist...');
       syncOrderWithServer();
     };
 
@@ -844,8 +893,35 @@ async function startSession() {
         const msg = JSON.parse(event.data);
 
         if (msg.type === 'connected') {
-          console.log('[WebSocket] Session connected:', msg);
+          console.log('[WebSocket] Gemini Live session connected:', msg);
           if (msg.tax_rate !== undefined) taxRate = msg.tax_rate;
+
+          isConnected = true;
+          isConnecting = false;
+          btnCall.disabled = false;
+          btnCall.classList.remove('connecting');
+          btnCall.classList.add('in-call');
+
+          // Start Order button has NO icons, text only
+          labelCall.textContent = 'End Order';
+          btnMute.disabled = false;
+
+          // Reset playback time right when connected
+          scheduledPlaybackTime = audioContextOut ? audioContextOut.currentTime : 0;
+
+          // Clear signal to customer that the receptionist is ready and listening
+          setStatus('status-listening', 'Listening to you... Speak now!');
+          updateCaption('assistant', "Connected! How may I take your order today?");
+          playReadyChime();
+          showToast(`Connected to The Sheraton Receptionist (${selectedVoice})`);
+
+          // Flush any pre-roll audio frames captured during handshake so no words were missed
+          if (preRollBuffer.length > 0) {
+            for (const chunk of preRollBuffer) {
+              try { ws.send(chunk); } catch (e) {}
+            }
+            preRollBuffer = [];
+          }
 
         } else if (msg.type === 'tool_call') {
           handleServerToolCalls(msg.calls, msg.bill);
@@ -940,8 +1016,10 @@ function endSession() {
   }
 
   btnCall.disabled = false;
+  btnCall.classList.remove('connecting');
   btnCall.classList.remove('in-call');
   labelCall.textContent = 'Start Order';
+  preRollBuffer = [];
 
   btnMute.disabled = true;
   if (isMuted) toggleMute();

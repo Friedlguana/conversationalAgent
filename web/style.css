@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Sheraton Restaurant — AI Voice Ordering Kiosk Stylesheet
+   The Sheraton — AI Voice Ordering Kiosk Stylesheet
    Theme: "Amber on Dark" (Obsidian Noir with Warm Amber / Gold Accents)
    ========================================================================== */
 
@@ -534,6 +534,18 @@ html, body {
   background: #94a3b8;
 }
 
+.status-connecting {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: var(--amber-300);
+}
+
+.status-connecting .status-dot {
+  background: var(--amber-400);
+  box-shadow: 0 0 10px var(--amber-400);
+  animation: pulse-dot 0.65s ease-in-out infinite;
+}
+
 .status-listening {
   background: rgba(245, 158, 11, 0.15);
   border-color: var(--amber-border);
@@ -698,6 +710,20 @@ html, body {
 
 .btn-call-primary.in-call:hover {
   box-shadow: 0 6px 24px rgba(239, 68, 68, 0.6);
+}
+
+.btn-call-primary.connecting {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.35) 0%, rgba(180, 83, 9, 0.35) 100%);
+  border: 1px solid var(--amber-border);
+  color: var(--amber-300);
+  cursor: wait;
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.25);
+  animation: pulse-btn-connecting 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse-btn-connecting {
+  0%, 100% { opacity: 0.8; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.02); }
 }
 
 .btn-mute {

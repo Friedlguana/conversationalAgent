@@ -1,5 +1,5 @@
 """
-test_web_e2e.py - Comprehensive End-to-End Verification Test for Sheraton Restaurant Kiosk.
+test_web_e2e.py - Comprehensive End-to-End Verification Test for The Sheraton Kiosk.
 Validates:
 1. 3-column layout, SVG icons (zero emojis), and Start Order button having NO icons.
 2. Menu API with 4 categories and 5% tax.
@@ -19,19 +19,23 @@ async def run_tests():
     ws_url = "ws://localhost:8080/ws?voice=Charon"
 
     print("=" * 65)
-    print("🧪 STARTING SHERATON RESTAURANT KIOSK VERIFICATION SUITE")
+    print("🧪 STARTING THE SHERATON KIOSK VERIFICATION SUITE")
     print("=" * 65)
 
     async with aiohttp.ClientSession() as session:
-        # Test 1: GET / (index.html) - verify structure, SVG icons, and NO icons on start button
+        # Test 1: GET / (index.html) - verify structure, SVG icons, subtitle removal, and NO icons on start button
         print("\n[Test 1] Testing GET / (index.html)...")
         async with session.get(f"{base_url}/") as resp:
             assert resp.status == 200, f"Expected 200, got {resp.status}"
             html = await resp.text()
-            assert "Sheraton Restaurant" in html, "Missing restaurant title in HTML"
+            assert "The Sheraton" in html, "Missing restaurant title in HTML"
             assert "menu-container" in html, "Missing menu container in HTML"
             assert "order-items-list" in html, "Missing order list in HTML"
             assert "visualizer-canvas" in html, "Missing canvas in HTML"
+            assert "₹0.00" in html, "Missing ₹ currency symbol in checkout deck"
+
+            # Check that "AI Voice Ordering Kiosk • Powered by Gemini Live" was removed
+            assert "Powered by Gemini Live" not in html, "Brand subtitle still present in header HTML!"
 
             # Check that the Start Order button has NO SVG icons
             btn_call_match = re.search(r'<button\s+id="btn-call"[^>]*>(.*?)</button>', html, re.DOTALL)
@@ -39,7 +43,7 @@ async def run_tests():
             btn_call_content = btn_call_match.group(1)
             assert "<svg" not in btn_call_content, f"#btn-call contains SVG icons! Content: {btn_call_content}"
             assert "Start Order" in btn_call_content, "Missing Start Order label in button"
-            print("  ✅ GET / passed (3-column layout verified; #btn-call has NO icons)")
+            print("  ✅ GET / passed (3-column layout verified, subtitle removed, ₹ currency present; #btn-call has NO icons)")
 
         # Test 2: Check for complete absence of emojis in frontend and backend files
         print("\n[Test 2] Checking zero emojis in all project files...")
@@ -48,9 +52,9 @@ async def run_tests():
             with open(fname, 'r', encoding='utf-8') as f:
                 content = f.read()
             non_ascii = set(re.findall(r'[^\x00-\x7F]', content))
-            emojis = [c for c in non_ascii if ord(c) > 0x2000 and c not in ('•', '—', '–', '’', '“', '”', '…', '✓', '→', '←', '↑', '↓', '±', '×', '÷', '·', '−', '⁺', '©', '®', '™')]
+            emojis = [c for c in non_ascii if ord(c) > 0x2000 and c not in ('₹', '•', '—', '–', '’', '“', '”', '…', '✓', '→', '←', '↑', '↓', '±', '×', '÷', '·', '−', '⁺', '©', '®', '™')]
             assert len(emojis) == 0, f"File {fname} still contains emojis: {emojis}"
-        print("  ✅ Zero emojis verified across all files; replaced with clean SVG icons")
+        print("  ✅ Zero emojis verified across all files; clean SVGs and ₹ symbol used")
 
         # Test 3: GET /static/style.css
         print("\n[Test 3] Testing GET /static/style.css...")
@@ -60,17 +64,25 @@ async def run_tests():
             assert "--amber-500" in css, "Missing amber color token in CSS"
             assert "--amber-glow" in css, "Missing amber glow in CSS"
             assert "kiosk-grid" in css, "Missing kiosk grid layout CSS"
-            print("  ✅ GET /static/style.css passed (Amber on Dark theme verified)")
+            assert "status-connecting" in css, "Missing status-connecting style in CSS"
+            assert "btn-call-primary.connecting" in css, "Missing connecting button style in CSS"
+            print("  ✅ GET /static/style.css passed (Amber on Dark theme & connecting styles verified)")
 
         # Test 4: GET /api/menu
         print("\n[Test 4] Testing GET /api/menu...")
         async with session.get(f"{base_url}/api/menu") as resp:
             assert resp.status == 200, f"Expected 200, got {resp.status}"
             menu = await resp.json()
-            assert menu.get("restaurant") == "Sheraton Restaurant"
+            assert menu.get("restaurant") == "The Sheraton"
             assert menu.get("tax_rate") == 0.05
             assert len(menu.get("categories", [])) >= 4
-            print(f"  ✅ GET /api/menu passed ({len(menu['categories'])} categories, 5% tax rate)")
+
+            # Verify Indian Rupee pricing standards (> ₹100 for luxury restaurant items)
+            burger = next(i for cat in menu["categories"] for i in cat["items"] if i["id"] == "main-1")
+            assert burger["price"] == 650.0, f"Expected burger price 650.0, got {burger['price']}"
+            ribeye = next(i for cat in menu["categories"] for i in cat["items"] if i["id"] == "main-2")
+            assert ribeye["price"] == 1450.0, f"Expected ribeye price 1450.0, got {ribeye['price']}"
+            print(f"  ✅ GET /api/menu passed ({len(menu['categories'])} categories, 5% GST, Indian Rupee pricing verified: Burger ₹650, Ribeye ₹1450)")
 
         # Test 5: GET /api/config
         print("\n[Test 5] Testing GET /api/config...")
@@ -79,16 +91,17 @@ async def run_tests():
             cfg = await resp.json()
             assert cfg["model"] == "gemini-3.1-flash-live-preview"
             assert cfg.get("tax_rate") == 0.05
-            print(f"  ✅ GET /api/config passed (Model: {cfg['model']}, Voice: {cfg.get('default_voice')})")
+            assert "₹" in cfg.get("system_prompt", ""), "System prompt missing Indian Rupee symbol (₹)"
+            print(f"  ✅ GET /api/config passed (Model: {cfg['model']}, Voice: {cfg.get('default_voice')}, Prompt in ₹)")
 
-        # Test 6: WebSocket Session 1 — Order items & Test calculate_bill tool
-        print(f"\n[Test 6] Testing Session 1: Tool calling & calculate_bill...")
+        # Test 6: WebSocket Session 1 — Order items & Test calculate_bill tool with INR math
+        print(f"\n[Test 6] Testing Session 1: Tool calling & calculate_bill with INR (₹)...")
         async with session.ws_connect(ws_url) as ws1:
             msg = await ws1.receive_json(timeout=10.0)
             assert msg.get("type") == "connected", f"Expected connected, got {msg}"
             print("  Connected to Session 1")
 
-            # Place order and ask for bill
+            # Place order and ask for bill in INR
             print("  Sending: 'I would like a Sheraton Signature Burger and Crispy Fries. What is my total?'")
             await ws1.send_json({
                 "type": "text_prompt",
@@ -117,7 +130,7 @@ async def run_tests():
                         tool_calls.extend(calls)
                         print(f"  ⚡ Session 1 Tool Calls: {[c['name'] for c in calls]}")
                         if data.get("bill"):
-                            print(f"  🧾 Bill Breakdown: Subtotal ${data['bill']['subtotal']:.2f}, Tax ${data['bill']['tax']:.2f}, Total ${data['bill']['grand_total']:.2f}")
+                            print(f"  🧾 Bill Breakdown (INR): Subtotal ₹{data['bill']['subtotal']:.2f}, GST ₹{data['bill']['tax']:.2f}, Total ₹{data['bill']['grand_total']:.2f}")
                     elif etype in ("agent_transcript", "text"):
                         agent_transcripts_1.append(data.get("text", ""))
                     elif etype == "turn_complete":
@@ -184,9 +197,9 @@ async def run_tests():
             await ws2.close()
             print("  🔌 Session 2 cleanly closed.")
 
-        # Test 8: Agent Places Order Tool (place_order)
+        # Test 8: Agent Places Order Tool (place_order) with INR math
         print(f"\n[Test 8] Testing Session 3: Agent `place_order` tool execution...")
-        await asyncio.sleep(1.0)
+        await asyncio.sleep(2.0)
 
         async with session.ws_connect(ws_url) as ws3:
             msg = await ws3.receive_json(timeout=20.0)
@@ -207,10 +220,11 @@ async def run_tests():
             placed_order_id = None
             start_t3 = asyncio.get_event_loop().time()
 
-            while not turn3_done and (asyncio.get_event_loop().time() - start_t3) < 22.0:
+            while not turn3_done and (asyncio.get_event_loop().time() - start_t3) < 40.0:
                 try:
-                    res = await asyncio.wait_for(ws3.receive(), timeout=8.0)
+                    res = await asyncio.wait_for(ws3.receive(), timeout=18.0)
                 except asyncio.TimeoutError:
+                    print("  ⚠️ Session 3 receive timeout!")
                     break
 
                 if res.type == aiohttp.WSMsgType.BINARY:
@@ -230,6 +244,11 @@ async def run_tests():
                     elif etype == "turn_complete":
                         turn3_done = True
                         break
+                    elif etype == "error":
+                        print(f"  ⚠️ Server error message: {data}")
+                else:
+                    print(f"  ⚠️ Unexpected res.type: {res.type} {res.data}")
+                    break
 
             print(f"  ✅ Session 3 Completed ({audio_bytes_3} audio bytes received)")
             print(f"  - Spoken response: \"{''.join(agent_transcripts_3).strip()}\"")
@@ -243,7 +262,7 @@ async def run_tests():
             print("  🔌 Session 3 cleanly closed.")
 
     print("\n" + "=" * 65)
-    print("🎉 ALL TESTS (INCLUDING AGENT PLACE ORDER) PASSED SUCCESSFULLY!")
+    print("🎉 ALL TESTS (INCLUDING INR PRICING & CONNECTION FLOW) PASSED SUCCESSFULLY!")
     print("=" * 65)
 
 
