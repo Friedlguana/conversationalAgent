@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#12100e">
+  <title>The Sheraton — Medical Scribe & Keyword Extraction</title>
+  <meta name="description" content="Real-time clinical consultation transcriber and structured medical prescription extractor powered by Gemini 3.5.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/demo2.css">
+</head>
+<body>
+  <!-- Ambient Background Glows -->
+  <div class="ambient-glow glow-top"></div>
+  <div class="ambient-glow glow-bottom"></div>
+
+  <div class="app-layout">
+    <!-- Top Global Header -->
+    <header class="kiosk-header demo2-header">
+      <div class="brand-group">
+        <a href="/" class="back-link" title="Return to Demo Hub">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+          <span class="back-text">Demos</span>
+        </a>
+
+        <div class="brand-divider"></div>
+
+        <div class="brand-badge medical-badge">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+          </svg>
+        </div>
+
+        <div class="brand-info">
+          <h1 class="brand-title">The Sheraton <span class="badge-tag">Medical Scribe</span></h1>
+          <span class="brand-subtitle">Live Consultation Transcription & Structured Clinical Extraction</span>
+        </div>
+      </div>
+
+      <!-- Action Buttons in Header -->
+      <div class="header-actions">
+        <!-- Live Record Toggle Button -->
+        <button id="btn-record" class="kiosk-action-btn btn-record" title="Start or Stop Microphone Recording">
+          <span class="rec-dot"></span>
+          <svg class="mic-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="22"/>
+          </svg>
+          <span id="label-record">Start Recording</span>
+        </button>
+
+        <!-- Extract Summary Button -->
+        <button id="btn-extract" class="kiosk-action-btn btn-extract" title="Extract Symptoms, Diagnosis & Prescriptions with Gemini 3.5 Flash Lite" disabled>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>
+          </svg>
+          <span id="label-extract">Extract Summary</span>
+        </button>
+
+        <!-- Print Button -->
+        <button id="btn-print" class="kiosk-action-btn btn-print" title="Print Prescription Slip / Export PDF">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 6 2 18 2 18 9"></polyline>
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+            <rect x="6" y="14" width="12" height="8"></rect>
+          </svg>
+          <span>Print / PDF</span>
+        </button>
+
+        <!-- Reset / Clear Button -->
+        <button id="btn-clear" class="kiosk-action-btn btn-clear-icon" title="Clear Consultation Dialogue">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 6h18"></path>
+            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Two-Column Layout -->
+    <main class="kiosk-grid demo2-grid">
+      <!-- COLUMN 1: Live Dialogue & Audio Capture Stage -->
+      <section id="col-transcript" class="kiosk-column demo2-column mobile-active" aria-label="Consultation Dialogue">
+        <div class="column-header">
+          <div class="column-title-wrap">
+            <span class="column-svg-icon medical-teal-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+              </svg>
+            </span>
+            <h2>Consultation Dialogue</h2>
+          </div>
+
+          <div class="header-status-group">
+            <div id="status-pill" class="status-pill status-ready">
+              <span class="status-dot"></span>
+              <span id="status-text">Microphone Idle</span>
+            </div>
+            <span id="session-timer" class="session-timer">00:00</span>
+          </div>
+        </div>
+
+        <!-- Real-Time Audio Visualizer Card (Confirms audio capture) -->
+        <div class="audio-visualizer-card" id="audio-visualizer-card">
+          <div class="visualizer-header">
+            <div class="visualizer-label-wrap">
+              <span class="mic-wave-pulse" id="mic-wave-pulse"></span>
+              <span class="visualizer-label" id="visualizer-label">Audio Input Capture</span>
+            </div>
+            <div class="audio-meter-wrap">
+              <span class="meter-text" id="meter-db">0%</span>
+              <div class="audio-meter-track">
+                <div class="audio-meter-fill" id="audio-meter-fill"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- HTML5 Canvas Visualizer Waveform -->
+          <div class="canvas-container">
+            <canvas id="audio-visualizer" width="640" height="76"></canvas>
+            <div id="visualizer-empty-notice" class="visualizer-empty-notice">
+              <span>Press "Start Recording" or speak to visualize audio waveforms</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Dialogue Scroll Feed -->
+        <div class="dialogue-feed-container" id="transcript-container">
+          <!-- Empty State Guide -->
+          <div id="welcome-message" class="welcome-message">
+            <div class="welcome-icon">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" y1="19" x2="12" y2="22"/>
+              </svg>
+            </div>
+            <h3>Ready for Clinical Consultation</h3>
+            <p>Click <strong>Start Recording</strong> and speak naturally. The AI will transcribe in real-time, detect doctor vs patient speech, and extract diagnosis and prescriptions.</p>
+            <div class="quick-examples">
+              <span class="examples-title">Quick Test Prompts:</span>
+              <button class="chip-sample" data-text="Doctor: Hello, what brings you in today?">Doctor: "Hello, what brings you in today?"</button>
+              <button class="chip-sample" data-text="Patient: I have had a severe migraine and nausea for the past 3 days.">Patient: "I have had a severe migraine and nausea for 3 days."</button>
+              <button class="chip-sample" data-text="Doctor: I will prescribe Sumatriptan 50mg as needed, and Ondansetron 4mg twice daily. Rest in a dark room.">Doctor: "I will prescribe Sumatriptan 50mg..."</button>
+            </div>
+          </div>
+          <!-- Real-time utterances will be appended here -->
+        </div>
+
+        <!-- Live Interim Streaming Box (Active speech preview) -->
+        <div id="interim-preview-box" class="interim-preview-box hidden">
+          <div class="interim-indicator">
+            <span class="interim-pulse"></span>
+            <span class="interim-tag">Live Speech</span>
+          </div>
+          <p id="interim-text" class="interim-content"></p>
+        </div>
+
+        <!-- Quick Manual Input & Demo Controls Deck -->
+        <div class="dialogue-input-deck">
+          <select id="speaker-select" class="speaker-select" title="Select Speaker Role">
+            <option value="patient">Patient</option>
+            <option value="doctor">Doctor</option>
+          </select>
+          <input type="text" id="manual-input" class="manual-input" placeholder="Type a dialogue line to test (or speak into mic)..." autocomplete="off">
+          <button id="btn-send-manual" class="btn-send-manual" title="Add Line to Dialogue">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+          </button>
+        </div>
+      </section>
+
+      <!-- COLUMN 2: Extracted Clinical Summary & Prescriptions -->
+      <section id="col-summary" class="kiosk-column demo2-column summary-column" aria-label="Extracted Clinical Summary">
+        <div class="column-header">
+          <div class="column-title-wrap">
+            <span class="column-svg-icon medical-teal-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+                <polyline points="10 9 9 9 8 9"></polyline>
+              </svg>
+            </span>
+            <h2>Extracted Clinical Summary</h2>
+          </div>
+
+          <div class="model-badge">
+            <span class="model-dot"></span>
+            <span>Gemini 3.5 Flash Lite</span>
+          </div>
+        </div>
+
+        <div class="summary-cards-scroll" id="summary-cards-container">
+          <!-- Symptoms Card -->
+          <div class="summary-card card-symptoms">
+            <div class="card-header">
+              <div class="card-icon icon-amber">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                  <line x1="12" y1="9" x2="12" y2="13"></line>
+                  <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+              </div>
+              <h3>Reported Symptoms</h3>
+            </div>
+            <div id="symptoms-container" class="card-body">
+              <p class="empty-state">No symptoms extracted yet. Record dialogue and click "Extract Summary".</p>
+            </div>
+          </div>
+
+          <!-- Duration & Timeline Card -->
+          <div class="summary-card card-duration">
+            <div class="card-header">
+              <div class="card-icon icon-blue">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+              </div>
+              <h3>Duration & Onset</h3>
+            </div>
+            <div class="card-body">
+              <p id="text-duration" class="empty-state">Not specified</p>
+            </div>
+          </div>
+
+          <!-- Root Cause / Clinical Diagnosis Card -->
+          <div class="summary-card card-diagnosis">
+            <div class="card-header">
+              <div class="card-icon icon-teal">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                </svg>
+              </div>
+              <h3>Root Cause / Diagnosis</h3>
+            </div>
+            <div class="card-body">
+              <div id="diagnosis-box" class="diagnosis-highlight">
+                <p id="text-diagnosis" class="empty-state">Awaiting extraction</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Prescriptions Card -->
+          <div class="summary-card card-prescriptions">
+            <div class="card-header">
+              <div class="card-icon icon-green">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"></path>
+                  <path d="m8.5 8.5 7 7"></path>
+                </svg>
+              </div>
+              <h3>Prescriptions & Dosage</h3>
+            </div>
+            <div id="prescriptions-container" class="card-body">
+              <p class="empty-state">No prescriptions extracted yet.</p>
+            </div>
+          </div>
+
+          <!-- Advice & Next Steps Card -->
+          <div class="summary-card card-advice">
+            <div class="card-header">
+              <div class="card-icon icon-purple">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="9 11 12 14 22 4"></polyline>
+                  <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                </svg>
+              </div>
+              <h3>Doctor's Advice & Next Steps</h3>
+            </div>
+            <div id="advice-container" class="card-body">
+              <p class="empty-state">No advice extracted yet.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Mobile Bottom Navigation Bar -->
+    <nav class="mobile-tab-bar" id="mobile-tab-bar" aria-label="Mobile Navigation">
+      <button class="tab-bar-item active" data-target="col-transcript">
+        <span class="tab-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
+        </span>
+        <span class="tab-label">Dialogue & Audio</span>
+      </button>
+
+      <button class="tab-bar-item" data-target="col-summary">
+        <span class="tab-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+          </svg>
+        </span>
+        <span class="tab-label">Clinical Summary</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- Print Document Template (Rendered only on print/export) -->
+  <div id="print-area" class="print-area">
+    <div class="print-header">
+      <div class="print-brand">
+        <h2>THE SHERATON MEDICAL CLINIC</h2>
+        <p>Outpatient Consultation & Clinical Prescription</p>
+      </div>
+      <div class="print-meta">
+        <p><strong>Date:</strong> <span id="print-date"></span></p>
+        <p><strong>Ref #:</strong> <span id="print-ref"></span></p>
+      </div>
+    </div>
+    <hr class="print-rule">
+    <div class="print-section">
+      <h3>Patient Symptoms</h3>
+      <div id="print-symptoms"></div>
+    </div>
+    <div class="print-section">
+      <h3>Duration / Onset</h3>
+      <p id="print-duration"></p>
+    </div>
+    <div class="print-section">
+      <h3>Clinical Diagnosis</h3>
+      <p id="print-diagnosis" class="print-bold"></p>
+    </div>
+    <div class="print-section">
+      <h3>Prescriptions & Dosage Schedule</h3>
+      <div id="print-prescriptions"></div>
+    </div>
+    <div class="print-section">
+      <h3>Doctor's Recommendations</h3>
+      <div id="print-advice"></div>
+    </div>
+    <div class="print-footer">
+      <div class="print-sign-box">
+        <div class="sign-line"></div>
+        <p>Attending Physician Signature</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Connecting Overlay -->
+  <div id="overlay-connecting" class="overlay hidden">
+    <div class="loader">
+      <div class="waveform">
+        <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+      </div>
+      <h2>Connecting Microphone...</h2>
+    </div>
+  </div>
+
+  <script src="/static/demo2.js"></script>
+</body>
+</html>

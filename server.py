@@ -365,9 +365,19 @@ def load_system_prompt() -> str:
     )
 
 
+async def handle_landing(request):
+    """Serves the new multi-demo landing page."""
+    return web.FileResponse(os.path.join(STATIC_DIR, "landing.html"))
+
+
 async def handle_index(request):
-    """Serves index.html."""
+    """Serves index.html (Demo 1 Voice Ordering Kiosk)."""
     return web.FileResponse(os.path.join(STATIC_DIR, "index.html"))
+
+
+async def handle_demo2(request):
+    """Serves demo2.html (Medical Transcript)."""
+    return web.FileResponse(os.path.join(STATIC_DIR, "demo2.html"))
 
 
 async def handle_menu(request):
@@ -850,16 +860,153 @@ async def handle_websocket(request):
         print("[WebSocket] Client disconnected")
 
     return ws
+DEMO2_TRANSCRIPT = ""
+
+async def handle_transcribe_ws(request):
+    """Demo 2 WebSocket for Live Transcription."""
+    ws = web.WebSocketResponse()
+    await ws.prepare(request)
+    global DEMO2_TRANSCRIPT
+    DEMO2_TRANSCRIPT = ""  # Reset on new connection
+    
+    config = types.LiveConnectConfig(
+        response_modalities=["TEXT"],
+    )
+    
+    try:
+        async with genai_client.aio.live.connect(model="gemini-3.5-transcribe-live", config=config) as session:
+            async def receiver():
+                global DEMO2_TRANSCRIPT
+                try:
+                    async for response in session.receive():
+                        if ws.closed:
+                            break
+                        if response.server_content:
+                            sc = response.server_content
+                            # Check interim streaming transcription
+                            if sc.interim_input_transcription and sc.interim_input_transcription.text:
+                                await ws.send_json({
+                                    "type": "interim_transcript",
+                                    "text": sc.interim_input_transcription.text
+                                })
+                            # Check finalized committed utterance
+                            if sc.input_transcription and sc.input_transcription.text:
+                                final_text = sc.input_transcription.text.strip()
+                                if final_text:
+                                    DEMO2_TRANSCRIPT += final_text + "\n"
+                                    await ws.send_json({
+                                        "type": "final_transcript",
+                                        "text": final_text
+                                    })
+                except Exception as e:
+                    print(f"[Demo 2 Receiver Error] {e}")
+            
+            recv_task = asyncio.create_task(receiver())
+            
+            async for msg in ws:
+                if msg.type == web.WSMsgType.BINARY:
+                    if msg.data:
+                        await session.send_realtime_input(
+                            audio=types.Blob(
+                                data=msg.data,
+                                mime_type="audio/pcm;rate=16000"
+                            )
+                        )
+                elif msg.type == web.WSMsgType.TEXT:
+                    try:
+                        data = json.loads(msg.data)
+                        if data.get("type") == "add_text":
+                            txt = data.get("text", "").strip()
+                            if txt:
+                                DEMO2_TRANSCRIPT += txt + "\n"
+                                await ws.send_json({
+                                    "type": "final_transcript",
+                                    "text": txt
+                                })
+                        elif data.get("type") == "clear":
+                            DEMO2_TRANSCRIPT = ""
+                            await ws.send_json({"type": "cleared"})
+                    except Exception as err:
+                        print(f"[Demo 2 Client Msg Error] {err}")
+                elif msg.type in (web.WSMsgType.CLOSE, web.WSMsgType.ERROR):
+                    break
+                    
+            recv_task.cancel()
+    except Exception as e:
+        print(f"[Demo 2 WS Error] {e}")
+    finally:
+        return ws
+
+
+async def handle_extract(request):
+    """Manual extraction endpoint for Demo 2."""
+    global DEMO2_TRANSCRIPT
+    
+    transcript = ""
+    try:
+        body = await request.json()
+        transcript = body.get("transcript", "").strip()
+    except Exception:
+        pass
+        
+    if not transcript:
+        transcript = DEMO2_TRANSCRIPT.strip()
+        
+    if not transcript:
+        return web.json_response({
+            "status": "error",
+            "message": "No transcript available. Please record or enter dialogue first."
+        })
+        
+    prompt_file = os.path.join(os.path.dirname(__file__), "system_prompt_medical.txt")
+    with open(prompt_file, "r") as f:
+        sys_prompt = f.read()
+        
+    prompt = f"Transcript:\n{transcript}"
+    
+    try:
+        response = await genai_client.aio.models.generate_content(
+            model="gemini-3.5-flash-lite",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=sys_prompt,
+                response_mime_type="application/json"
+            )
+        )
+        
+        result_text = response.text.strip()
+        if result_text.startswith("```json"):
+            result_text = result_text[7:-3].strip()
+        elif result_text.startswith("```"):
+            result_text = result_text[3:-3].strip()
+            
+        data = json.loads(result_text)
+        return web.json_response({"status": "success", "data": data, "transcript": transcript})
+    except Exception as e:
+        print(f"[Extraction Error] {e}")
+        return web.json_response({"status": "error", "message": str(e)})
+
+
+async def handle_clear_transcript(request):
+    """Clears Demo 2 accumulated transcript."""
+    global DEMO2_TRANSCRIPT
+    DEMO2_TRANSCRIPT = ""
+    return web.json_response({"status": "success"})
 
 
 def create_app():
     """Initializes aiohttp web application."""
     app = web.Application()
-    app.router.add_get("/", handle_index)
+    app.router.add_get("/", handle_landing)
+    app.router.add_get("/demo1", handle_index)
+    app.router.add_get("/demo2", handle_demo2)
     app.router.add_get("/api/menu", handle_menu)
     app.router.add_get("/api/config", handle_config)
     app.router.add_post("/api/update_prompt", handle_update_prompt)
+    app.router.add_post("/api/extract", handle_extract)
+    app.router.add_post("/api/clear_transcript", handle_clear_transcript)
     app.router.add_get("/ws", handle_websocket)
+    app.router.add_get("/ws/transcribe", handle_transcribe_ws)
 
     # Static files (CSS, JS, assets)
     app.router.add_static("/static/", STATIC_DIR)
