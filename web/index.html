@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#12100e">
   <title>The Sheraton — AI Voice Ordering Kiosk</title>
   <meta name="description" content="Upscale voice-activated restaurant ordering kiosk powered by Gemini 3.1 Flash Live with real-time order tracking.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -58,7 +61,7 @@
     <!-- Main Kiosk Body (3 Columns) -->
     <main class="kiosk-grid">
       <!-- COLUMN 1: Fixed Restaurant Menu Display -->
-      <section class="kiosk-column menu-column" aria-label="Restaurant Menu">
+      <section id="col-menu" class="kiosk-column menu-column mobile-active" aria-label="Restaurant Menu">
         <div class="column-header">
           <div class="column-title-wrap">
             <span class="column-svg-icon">
@@ -90,7 +93,7 @@
       </section>
 
       <!-- COLUMN 2: AI Voice Assistant Stage -->
-      <section class="kiosk-column assistant-column" aria-label="Voice Assistant">
+      <section id="col-assistant" class="kiosk-column assistant-column" aria-label="Voice Assistant">
         <!-- Live Status Pill -->
         <div id="status-pill" class="status-pill status-ready">
           <span class="status-dot"></span>
@@ -139,7 +142,7 @@
       </section>
 
       <!-- COLUMN 3: Current Order Ticket -->
-      <section class="kiosk-column order-column" aria-label="Current Order Ticket">
+      <section id="col-order" class="kiosk-column order-column" aria-label="Current Order Ticket">
         <div class="column-header">
           <div class="column-title-wrap">
             <span class="column-svg-icon">
@@ -209,6 +212,46 @@
         </div>
       </section>
     </main>
+
+    <!-- Bottom Mobile Tab Bar (Active on Mobile <=768px) -->
+    <nav class="mobile-tab-bar" id="mobile-tab-bar" aria-label="Mobile Navigation">
+      <button class="tab-bar-item active" data-target="col-menu" id="tab-btn-menu">
+        <span class="tab-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+            <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+            <path d="M9 12h6"></path>
+            <path d="M9 16h6"></path>
+          </svg>
+        </span>
+        <span class="tab-label">Menu</span>
+      </button>
+
+      <button class="tab-bar-item" data-target="col-assistant" id="tab-btn-assistant">
+        <span class="tab-icon voice-tab-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="22"/>
+          </svg>
+          <span class="tab-voice-pulse" id="tab-voice-pulse"></span>
+        </span>
+        <span class="tab-label">Voice</span>
+      </button>
+
+      <button class="tab-bar-item" data-target="col-order" id="tab-btn-order">
+        <span class="tab-icon order-tab-icon-wrap">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"></path>
+            <path d="M8 7h8"></path>
+            <path d="M8 11h8"></path>
+            <path d="M8 15h5"></path>
+          </svg>
+          <span class="tab-order-badge hidden" id="tab-order-badge">0</span>
+        </span>
+        <span class="tab-label">Order</span>
+      </button>
+    </nav>
 
     <!-- System Prompt Customization Modal -->
     <div id="prompt-modal" class="modal-overlay hidden">

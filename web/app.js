@@ -65,6 +65,14 @@ const successReceiptSummary = document.getElementById('success-receipt-summary')
 const btnNewOrder = document.getElementById('btn-new-order');
 const toast = document.getElementById('toast');
 
+// Mobile navigation elements
+const mobileTabBar = document.getElementById('mobile-tab-bar');
+const tabBtnMenu = document.getElementById('tab-btn-menu');
+const tabBtnAssistant = document.getElementById('tab-btn-assistant');
+const tabBtnOrder = document.getElementById('tab-btn-order');
+const tabOrderBadge = document.getElementById('tab-order-badge');
+const tabVoicePulse = document.getElementById('tab-voice-pulse');
+
 // ============================================================================
 // Application State
 // ============================================================================
@@ -405,6 +413,19 @@ function renderOrder(highlightItemId = null) {
   const totalItemCount = orderItems.reduce((sum, item) => sum + item.quantity, 0);
   orderBadge.textContent = `${totalItemCount} item${totalItemCount === 1 ? '' : 's'}`;
 
+  // Update mobile tab bar order badge
+  if (tabOrderBadge) {
+    if (totalItemCount > 0) {
+      tabOrderBadge.textContent = totalItemCount > 99 ? '99+' : totalItemCount;
+      tabOrderBadge.classList.remove('hidden');
+      tabOrderBadge.classList.remove('badge-pop');
+      void tabOrderBadge.offsetWidth;
+      tabOrderBadge.classList.add('badge-pop');
+    } else {
+      tabOrderBadge.classList.add('hidden');
+    }
+  }
+
   if (orderItems.length === 0) {
     orderEmptyState.style.display = 'flex';
     btnClearOrder.style.display = 'none';
@@ -545,6 +566,9 @@ btnNewOrder.addEventListener('click', () => {
   successModal.classList.add('hidden');
   clearOrder();
   updateCaption('assistant', "Order placed! How else can I help you today?");
+  if (window.innerWidth <= 768) {
+    switchMobileTab('col-menu');
+  }
 });
 
 function playConfirmationChime() {
@@ -906,6 +930,16 @@ async function startSession() {
           labelCall.textContent = 'End Order';
           btnMute.disabled = false;
 
+          // Pulse voice indicator on mobile tab bar
+          if (tabBtnAssistant) {
+            tabBtnAssistant.classList.add('in-session');
+          }
+
+          // Auto-switch to voice stage on mobile when connected
+          if (window.innerWidth <= 768) {
+            switchMobileTab('col-assistant');
+          }
+
           // Reset playback time right when connected
           scheduledPlaybackTime = audioContextOut ? audioContextOut.currentTime : 0;
 
@@ -981,6 +1015,11 @@ function endSession() {
   isConnecting = false;
   isAgentSpeaking = false;
   stopAllAgentAudio();
+
+  // Reset voice pulse on mobile tab bar
+  if (tabBtnAssistant) {
+    tabBtnAssistant.classList.remove('in-session');
+  }
 
   // RESET TIMING TO 0 FOR CLEAN RECONNECT
   scheduledPlaybackTime = 0;
@@ -1251,9 +1290,44 @@ function renderVisualizer() {
   ctx.shadowBlur = 0;
 }
 
+// ============================================================================
+// Mobile Tab Navigation Logic
+// ============================================================================
+function switchMobileTab(targetId) {
+  const tabButtons = document.querySelectorAll('.tab-bar-item');
+  const columns = document.querySelectorAll('.kiosk-column');
+
+  tabButtons.forEach(btn => {
+    if (btn.dataset.target === targetId) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
+
+  columns.forEach(col => {
+    if (col.id === targetId) {
+      col.classList.add('mobile-active');
+    } else {
+      col.classList.remove('mobile-active');
+    }
+  });
+}
+
+function initMobileNavigation() {
+  const tabButtons = document.querySelectorAll('.tab-bar-item');
+  tabButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.target;
+      if (target) switchMobileTab(target);
+    });
+  });
+}
+
 // Window Load Initialization
 window.addEventListener('DOMContentLoaded', () => {
   fetchMenu();
   fetchInitialConfig();
   renderVisualizer();
+  initMobileNavigation();
 });
