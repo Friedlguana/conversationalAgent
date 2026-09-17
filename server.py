@@ -938,6 +938,159 @@ async def handle_transcribe_ws(request):
         return ws
 
 
+async def handle_transcribe_audio(request):
+    """Audio transcription endpoint using gemini-3.5-transcribe with native diarization."""
+    global DEMO2_TRANSCRIPT
+    try:
+        audio_bytes = None
+        mime_type = "audio/wav"
+
+        if request.content_type.startswith("multipart/"):
+            reader = await request.multipart()
+            while True:
+                part = await reader.next()
+                if part is None:
+                    break
+                if part.name in ("audio", "file"):
+                    audio_bytes = await part.read()
+                    if part.headers.get("Content-Type"):
+                        mime_type = part.headers.get("Content-Type")
+                    elif part.filename:
+                        ext = os.path.splitext(part.filename)[1].lower()
+                        if ext == ".mp3":
+                            mime_type = "audio/mp3"
+                        elif ext == ".webm":
+                            mime_type = "audio/webm"
+                        elif ext == ".ogg":
+                            mime_type = "audio/ogg"
+                        elif ext in (".m4a", ".mp4"):
+                            mime_type = "audio/mp4"
+                        elif ext == ".wav":
+                            mime_type = "audio/wav"
+                    break
+        else:
+            audio_bytes = await request.read()
+            mime_type = request.content_type or "audio/wav"
+
+        if not audio_bytes:
+            return web.json_response({"status": "error", "message": "No audio data received in request."}, status=400)
+
+        # Normalize mime type
+        mime_type = mime_type.split(";")[0].strip().lower()
+        if mime_type == "audio/x-wav":
+            mime_type = "audio/wav"
+
+        print(f"[Transcribe Audio] Processing {len(audio_bytes)} bytes ({mime_type}) with gemini-3.5-transcribe...")
+
+        # 1. Call gemini-3.5-transcribe with speaker diarization & timestamps
+        response = await genai_client.aio.models.generate_content(
+            model="gemini-3.5-transcribe",
+            contents=[types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)],
+            config=types.GenerateContentConfig(
+                audio_transcription_config=types.AudioTranscriptionConfig(
+                    diarization=True,
+                    word_timestamp=True,
+                )
+            )
+        )
+
+        utterances = []
+        if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
+            for p in response.candidates[0].content.parts:
+                at = getattr(p, "audio_transcription", None)
+                if at and at.text and at.text.strip():
+                    start_t = at.words[0].start_offset if at.words else "0s"
+                    end_t = at.words[-1].end_offset if at.words else "0s"
+                    utterances.append({
+                        "speaker_label": at.speaker_label or "spk:0",
+                        "text": at.text.strip(),
+                        "start": start_t,
+                        "end": end_t,
+                    })
+
+        if not utterances:
+            raw_text = response.text.strip() if response.text else ""
+            if raw_text:
+                utterances.append({
+                    "speaker_label": "spk:0",
+                    "text": raw_text,
+                    "start": "0s",
+                    "end": "0s",
+                    "role": "doctor",
+                })
+            else:
+                return web.json_response({
+                    "status": "error",
+                    "message": "No speech detected in audio."
+                })
+
+        # 2. Map speaker labels to doctor / patient
+        distinct_speakers = sorted(list(set(u["speaker_label"] for u in utterances)))
+        mapping = {s: "doctor" if i == 0 else "patient" for i, s in enumerate(distinct_speakers)}
+
+        if len(distinct_speakers) > 1:
+            try:
+                raw_lines = [f"{u['speaker_label']}: {u['text']}" for u in utterances]
+                role_prompt = (
+                    "In this clinical consultation dialogue, determine which speaker is the doctor and which is the patient:\n"
+                    + "\n".join(raw_lines)
+                    + "\nReturn a JSON object mapping each speaker label to either 'doctor' or 'patient', e.g.: {\"spk:0\": \"doctor\", \"spk:1\": \"patient\"}"
+                )
+                role_res = await genai_client.aio.models.generate_content(
+                    model="gemini-3.5-flash-lite",
+                    contents=role_prompt,
+                    config=types.GenerateContentConfig(response_mime_type="application/json")
+                )
+                if role_res.text:
+                    parsed_mapping = json.loads(role_res.text.strip())
+                    mapping.update(parsed_mapping)
+            except Exception as role_err:
+                print(f"[Role Mapping Notice] {role_err}")
+
+        for u in utterances:
+            u["role"] = mapping.get(u["speaker_label"], "patient").lower()
+
+        # Build full transcript
+        full_dialogue = "\n".join(f"{u['role'].capitalize()}: {u['text']}" for u in utterances)
+        DEMO2_TRANSCRIPT = full_dialogue
+
+        # 3. Strict Keyword Extraction using system_prompt_medical.txt
+        prompt_file = os.path.join(os.path.dirname(__file__), "system_prompt_medical.txt")
+        with open(prompt_file, "r") as f:
+            sys_prompt = f.read()
+
+        ext_res = await genai_client.aio.models.generate_content(
+            model="gemini-3.5-flash-lite",
+            contents=f"Transcript:\n{full_dialogue}",
+            config=types.GenerateContentConfig(
+                system_instruction=sys_prompt,
+                response_mime_type="application/json"
+            )
+        )
+
+        ext_data = {}
+        try:
+            res_txt = ext_res.text.strip()
+            if res_txt.startswith("```json"):
+                res_txt = res_txt[7:-3].strip()
+            elif res_txt.startswith("```"):
+                res_txt = res_txt[3:-3].strip()
+            ext_data = json.loads(res_txt)
+        except Exception as json_err:
+            print(f"[Keywords JSON Parse Error] {json_err}")
+
+        return web.json_response({
+            "status": "success",
+            "utterances": utterances,
+            "transcript": full_dialogue,
+            "data": ext_data
+        })
+
+    except Exception as e:
+        print(f"[Audio Transcription Error] {e}")
+        return web.json_response({"status": "error", "message": str(e)}, status=500)
+
+
 async def handle_extract(request):
     """Manual extraction endpoint for Demo 2."""
     global DEMO2_TRANSCRIPT
@@ -1003,6 +1156,7 @@ def create_app():
     app.router.add_get("/api/menu", handle_menu)
     app.router.add_get("/api/config", handle_config)
     app.router.add_post("/api/update_prompt", handle_update_prompt)
+    app.router.add_post("/api/transcribe_audio", handle_transcribe_audio)
     app.router.add_post("/api/extract", handle_extract)
     app.router.add_post("/api/clear_transcript", handle_clear_transcript)
     app.router.add_get("/ws", handle_websocket)

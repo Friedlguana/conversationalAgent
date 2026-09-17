@@ -55,8 +55,8 @@ async def test_01_http_routes_and_assets():
 
 async def test_02_websocket_audio_streaming():
     """Verify streaming 16kHz PCM audio yields interim and final transcriptions."""
-    wav_path = "scratch/patient.wav"
-    assert os.path.exists(wav_path), "scratch/patient.wav must exist for audio e2e test"
+    wav_path = "web/sample_dialogue.wav"
+    assert os.path.exists(wav_path), "web/sample_dialogue.wav must exist for audio e2e test"
 
     with open(wav_path, "rb") as f:
         wav_data = f.read()

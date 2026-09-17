@@ -26,6 +26,10 @@
   --rec-crimson-glow: rgba(239, 68, 68, 0.35);
 }
 
+.hidden {
+  display: none !important;
+}
+
 /* --------------------------------------------------------------------------
    Demo 2 Header
    -------------------------------------------------------------------------- */
@@ -168,6 +172,19 @@
   border-color: var(--border-subtle);
   color: var(--text-muted);
   box-shadow: none;
+}
+
+.btn-upload {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+.btn-upload:hover {
+  background: rgba(20, 184, 166, 0.12);
+  border-color: var(--medical-teal-border);
+  color: var(--medical-teal);
+  transform: translateY(-1px);
 }
 
 .btn-print {
@@ -314,6 +331,41 @@
   color: var(--text-secondary);
 }
 
+.visualizer-controls-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-audio-playback {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  color: var(--medical-teal);
+  background: rgba(20, 184, 166, 0.1);
+  border: 1px solid var(--medical-teal-border);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-audio-playback:hover {
+  background: rgba(20, 184, 166, 0.2);
+  color: #fff;
+  box-shadow: 0 0 10px var(--medical-teal-glow);
+}
+
+.btn-audio-playback.playing {
+  background: linear-gradient(135deg, rgba(20, 184, 166, 0.25), rgba(13, 148, 136, 0.4));
+  border-color: var(--medical-teal);
+  color: #fff;
+  box-shadow: 0 0 14px var(--medical-teal-glow);
+}
+
 .audio-meter-wrap {
   display: flex;
   align-items: center;
@@ -456,6 +508,75 @@
   background: rgba(20, 184, 166, 0.1);
   border-color: var(--medical-teal-border);
   color: var(--medical-teal);
+}
+
+.chip-sample-audio {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, rgba(20, 184, 166, 0.15), rgba(13, 148, 136, 0.25));
+  border-color: var(--medical-teal-border);
+  color: var(--medical-teal);
+  font-weight: 600;
+  box-shadow: 0 0 12px var(--medical-teal-glow);
+}
+
+.chip-sample-audio:hover {
+  background: linear-gradient(135deg, rgba(20, 184, 166, 0.28), rgba(13, 148, 136, 0.42));
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.sample-audio-btn-group {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.chip-sample-listen {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-primary);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.chip-sample-listen:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
+}
+
+.chip-sample-listen.playing {
+  border-color: var(--medical-teal);
+  color: var(--medical-teal);
+  box-shadow: 0 0 12px var(--medical-teal-glow);
+  background: rgba(20, 184, 166, 0.12);
+}
+
+.chip-sample-listen svg,
+.btn-audio-playback svg {
+  flex-shrink: 0;
+}
+
+.chip-sample-listen .pause-icon,
+.btn-audio-playback .pause-icon {
+  fill: currentColor;
+}
+
+.utterance-time-range {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 2px 7px;
+  border-radius: 4px;
+  letter-spacing: 0.02em;
 }
 
 /* Utterance Speech Bubbles */

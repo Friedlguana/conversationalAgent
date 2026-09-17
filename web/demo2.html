@@ -48,7 +48,7 @@
       <!-- Action Buttons in Header -->
       <div class="header-actions">
         <!-- Live Record Toggle Button -->
-        <button id="btn-record" class="kiosk-action-btn btn-record" title="Start or Stop Microphone Recording">
+        <button id="btn-record" class="kiosk-action-btn btn-record" title="Start Recording Microphone or Stop & Transcribe with Gemini 3.5">
           <span class="rec-dot"></span>
           <svg class="mic-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
@@ -57,6 +57,17 @@
           </svg>
           <span id="label-record">Start Recording</span>
         </button>
+
+        <!-- Upload Audio Button -->
+        <button id="btn-upload" class="kiosk-action-btn btn-upload" title="Upload Audio File (.wav, .mp3, .m4a, .webm)">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          <span id="label-upload">Upload Audio</span>
+        </button>
+        <input type="file" id="file-audio-upload" accept="audio/*,.wav,.mp3,.m4a,.webm,.ogg" style="display:none">
 
         <!-- Extract Summary Button -->
         <button id="btn-extract" class="kiosk-action-btn btn-extract" title="Extract Symptoms, Diagnosis & Prescriptions with Gemini 3.5 Flash Lite" disabled>
@@ -117,10 +128,23 @@
               <span class="mic-wave-pulse" id="mic-wave-pulse"></span>
               <span class="visualizer-label" id="visualizer-label">Audio Input Capture</span>
             </div>
-            <div class="audio-meter-wrap">
-              <span class="meter-text" id="meter-db">0%</span>
-              <div class="audio-meter-track">
-                <div class="audio-meter-fill" id="audio-meter-fill"></div>
+            <div class="visualizer-controls-wrap">
+              <!-- Play / Pause Sample Audio Button -->
+              <button id="btn-play-audio-header" class="btn-audio-playback" title="Play or Pause sample doctor-patient dialogue audio">
+                <svg class="play-icon" width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+                <svg class="pause-icon hidden" width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="6" y="4" width="4" height="16"></rect>
+                  <rect x="14" y="4" width="4" height="16"></rect>
+                </svg>
+                <span id="label-play-header">Play Sample Audio</span>
+              </button>
+              <div class="audio-meter-wrap">
+                <span class="meter-text" id="meter-db">0%</span>
+                <div class="audio-meter-track">
+                  <div class="audio-meter-fill" id="audio-meter-fill"></div>
+                </div>
               </div>
             </div>
           </div>
@@ -129,10 +153,13 @@
           <div class="canvas-container">
             <canvas id="audio-visualizer" width="640" height="76"></canvas>
             <div id="visualizer-empty-notice" class="visualizer-empty-notice">
-              <span>Press "Start Recording" or speak to visualize audio waveforms</span>
+              <span>Press "Start Recording", play audio, or speak to visualize waveforms</span>
             </div>
           </div>
         </div>
+
+        <!-- Hidden Audio Element for Sample Playback -->
+        <audio id="sample-audio-player" src="/static/sample_dialogue.wav" preload="auto"></audio>
 
         <!-- Live Dialogue Scroll Feed -->
         <div class="dialogue-feed-container" id="transcript-container">
@@ -148,7 +175,25 @@
             <h3>Ready for Clinical Consultation</h3>
             <p>Click <strong>Start Recording</strong> and speak naturally. The AI will transcribe in real-time, detect doctor vs patient speech, and extract diagnosis and prescriptions.</p>
             <div class="quick-examples">
-              <span class="examples-title">Quick Test Prompts:</span>
+              <span class="examples-title">Quick Test Prompts & Audio:</span>
+              <div class="sample-audio-btn-group">
+                <button class="chip-sample chip-sample-audio" id="btn-run-sample-audio" title="Transcribe and extract medical keywords from sample consultation audio">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                  </svg>
+                  <span>Transcribe Sample Audio</span>
+                </button>
+                <button class="chip-sample chip-sample-listen" id="btn-play-sample-prompt" title="Listen to doctor-patient conversation audio">
+                  <svg class="play-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                  </svg>
+                  <svg class="pause-icon hidden" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <rect x="6" y="4" width="4" height="16"></rect>
+                    <rect x="14" y="4" width="4" height="16"></rect>
+                  </svg>
+                  <span id="label-play-prompt">Listen to Sample Audio (12s)</span>
+                </button>
+              </div>
               <button class="chip-sample" data-text="Doctor: Hello, what brings you in today?">Doctor: "Hello, what brings you in today?"</button>
               <button class="chip-sample" data-text="Patient: I have had a severe migraine and nausea for the past 3 days.">Patient: "I have had a severe migraine and nausea for 3 days."</button>
               <button class="chip-sample" data-text="Doctor: I will prescribe Sumatriptan 50mg as needed, and Ondansetron 4mg twice daily. Rest in a dark room.">Doctor: "I will prescribe Sumatriptan 50mg..."</button>

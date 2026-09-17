@@ -1,6 +1,7 @@
 // demo2.js - The Sheraton Medical Scribe & Consultation Dialogue
+// Powered by gemini-3.5-transcribe (Native Speaker Diarization) & gemini-3.5-flash-lite (Clinical Extraction)
+
 let isRecording = false;
-let ws = null;
 let audioContext = null;
 let mediaStream = null;
 let scriptProcessor = null;
@@ -8,11 +9,15 @@ let analyserNode = null;
 let visualizerAnimId = null;
 let timerInterval = null;
 let startTime = null;
+let recordedAudioChunks = [];
 let dialogueHistory = [];
 
 // DOM Elements
 const btnRecord = document.getElementById('btn-record');
 const labelRecord = document.getElementById('label-record');
+const btnUpload = document.getElementById('btn-upload');
+const labelUpload = document.getElementById('label-upload');
+const fileAudioUpload = document.getElementById('file-audio-upload');
 const btnExtract = document.getElementById('btn-extract');
 const labelExtract = document.getElementById('label-extract');
 const btnPrint = document.getElementById('btn-print');
@@ -62,6 +67,9 @@ document.addEventListener('DOMContentLoaded', () => {
   initVisualizerIdle();
   setupMobileTabs();
   setupExamples();
+  setupUpload();
+  setupSampleAudio();
+  setupAudioPlayback();
 });
 
 function setupMobileTabs() {
@@ -84,6 +92,7 @@ function setupMobileTabs() {
 
 function setupExamples() {
   document.querySelectorAll('.chip-sample').forEach(chip => {
+    if (chip.id === 'btn-run-sample-audio') return;
     chip.addEventListener('click', () => {
       const text = chip.dataset.text;
       if (text) {
@@ -93,12 +102,194 @@ function setupExamples() {
   });
 }
 
+function setupUpload() {
+  if (btnUpload && fileAudioUpload) {
+    btnUpload.addEventListener('click', () => {
+      fileAudioUpload.click();
+    });
+
+    fileAudioUpload.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      await processAudioFile(file, file.name);
+      fileAudioUpload.value = '';
+    });
+  }
+}
+
+function setupSampleAudio() {
+  const sampleBtn = document.getElementById('btn-run-sample-audio');
+  if (sampleBtn) {
+    sampleBtn.addEventListener('click', async () => {
+      // Stop playback if playing
+      const audioElem = document.getElementById('sample-audio-player');
+      if (audioElem && !audioElem.paused) {
+        audioElem.pause();
+      }
+
+      updateStatus('recording', 'Loading Sample Consultation Audio...');
+      try {
+        const res = await fetch('/static/sample_dialogue.wav');
+        if (!res.ok) throw new Error('Sample audio not found on server.');
+        const blob = await res.blob();
+        await processAudioFile(blob, 'sample_dialogue.wav');
+      } catch (err) {
+        console.error('Failed to load sample audio:', err);
+        alert('Could not load sample audio: ' + err.message);
+        updateStatus('ready', 'Microphone Idle');
+      }
+    });
+  }
+}
+
 // ---------------------------------------------------------------------------
-// Record Button Flow
+// Audio Playback for Sample Audio (Listen feature)
+// ---------------------------------------------------------------------------
+let playbackSourceNode = null;
+
+function setupAudioPlayback() {
+  const audioElem = document.getElementById('sample-audio-player');
+  const btnHeader = document.getElementById('btn-play-audio-header');
+  const btnPrompt = document.getElementById('btn-play-sample-prompt');
+
+  async function togglePlay() {
+    if (!audioElem) return;
+
+    if (!audioElem.paused) {
+      audioElem.pause();
+    } else {
+      // If currently recording microphone, stop first
+      if (isRecording) {
+        stopRecordingAndTranscribe();
+      }
+
+      // Initialize or resume Web Audio Context
+      try {
+        if (!audioContext || audioContext.state === 'closed') {
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioContext.state === 'suspended') {
+          await audioContext.resume();
+        }
+
+        if (!analyserNode) {
+          analyserNode = audioContext.createAnalyser();
+          analyserNode.fftSize = 256;
+          analyserNode.smoothingTimeConstant = 0.8;
+        }
+
+        // Connect media element source to analyser so visualizer reacts
+        if (!playbackSourceNode) {
+          try {
+            playbackSourceNode = audioContext.createMediaElementSource(audioElem);
+            playbackSourceNode.connect(analyserNode);
+            analyserNode.connect(audioContext.destination);
+          } catch (connErr) {
+            console.warn('Media element source already connected or note:', connErr);
+          }
+        }
+      } catch (ctxErr) {
+        console.warn('AudioContext setup for playback note:', ctxErr);
+      }
+
+      try {
+        await audioElem.play();
+      } catch (err) {
+        console.error('Audio playback error:', err);
+        alert('Playback error: ' + err.message);
+      }
+    }
+  }
+
+  if (btnHeader) btnHeader.addEventListener('click', togglePlay);
+  if (btnPrompt) btnPrompt.addEventListener('click', togglePlay);
+
+  if (audioElem) {
+    audioElem.addEventListener('play', () => {
+      setPlaybackUIState(true);
+      if (visualizerCard) visualizerCard.classList.add('active-recording');
+      if (visualizerLabel) visualizerLabel.textContent = 'Audio Playback • Sample Consultation';
+      updateStatus('recording', 'Playing Sample Consultation Audio...');
+      if (!visualizerAnimId) {
+        drawLiveVisualizer();
+      }
+    });
+
+    audioElem.addEventListener('pause', () => {
+      setPlaybackUIState(false);
+      if (visualizerCard) visualizerCard.classList.remove('active-recording');
+      if (visualizerLabel) visualizerLabel.textContent = 'Microphone Idle';
+      updateStatus('ready', 'Microphone Idle');
+      if (visualizerAnimId) {
+        cancelAnimationFrame(visualizerAnimId);
+        visualizerAnimId = null;
+      }
+      initVisualizerIdle();
+    });
+
+    audioElem.addEventListener('ended', () => {
+      setPlaybackUIState(false);
+      if (visualizerCard) visualizerCard.classList.remove('active-recording');
+      if (visualizerLabel) visualizerLabel.textContent = 'Microphone Idle';
+      updateStatus('ready', 'Microphone Idle');
+      if (visualizerAnimId) {
+        cancelAnimationFrame(visualizerAnimId);
+        visualizerAnimId = null;
+      }
+      initVisualizerIdle();
+    });
+
+    audioElem.addEventListener('timeupdate', () => {
+      if (audioElem.duration) {
+        const cur = Math.floor(audioElem.currentTime);
+        const dur = Math.floor(audioElem.duration);
+        const curM = String(Math.floor(cur / 60)).padStart(2, '0');
+        const curS = String(cur % 60).padStart(2, '0');
+        const durM = String(Math.floor(dur / 60)).padStart(2, '0');
+        const durS = String(dur % 60).padStart(2, '0');
+        const labelHeader = document.getElementById('label-play-header');
+        const labelPrompt = document.getElementById('label-play-prompt');
+        if (labelHeader && !audioElem.paused) labelHeader.textContent = `Pause (${curM}:${curS})`;
+        if (labelPrompt && !audioElem.paused) labelPrompt.textContent = `Pause Audio (${curM}:${curS} / ${durM}:${durS})`;
+      }
+    });
+  }
+}
+
+function setPlaybackUIState(isPlaying) {
+  const btnHeader = document.getElementById('btn-play-audio-header');
+  const btnPrompt = document.getElementById('btn-play-sample-prompt');
+  const labelHeader = document.getElementById('label-play-header');
+  const labelPrompt = document.getElementById('label-play-prompt');
+
+  [btnHeader, btnPrompt].forEach(btn => {
+    if (!btn) return;
+    const playIcon = btn.querySelector('.play-icon');
+    const pauseIcon = btn.querySelector('.pause-icon');
+
+    if (isPlaying) {
+      btn.classList.add('playing');
+      if (playIcon) playIcon.classList.add('hidden');
+      if (pauseIcon) pauseIcon.classList.remove('hidden');
+    } else {
+      btn.classList.remove('playing');
+      if (playIcon) playIcon.classList.remove('hidden');
+      if (pauseIcon) pauseIcon.classList.add('hidden');
+    }
+  });
+
+  if (!isPlaying) {
+    if (labelHeader) labelHeader.textContent = 'Play Sample Audio';
+    if (labelPrompt) labelPrompt.textContent = 'Listen to Sample Audio (12s)';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Record Button Flow (gemini-3.5-transcribe)
 // ---------------------------------------------------------------------------
 btnRecord.addEventListener('click', () => {
   if (isRecording) {
-    stopRecording();
+    stopRecordingAndTranscribe();
   } else {
     startRecording();
   }
@@ -107,6 +298,8 @@ btnRecord.addEventListener('click', () => {
 async function startRecording() {
   try {
     overlayConnecting.classList.remove('hidden');
+    recordedAudioChunks = [];
+
     mediaStream = await navigator.mediaDevices.getUserMedia({
       audio: {
         channelCount: 1,
@@ -116,50 +309,24 @@ async function startRecording() {
       },
     });
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(`${protocol}//${window.location.host}/ws/transcribe`);
+    overlayConnecting.classList.add('hidden');
+    isRecording = true;
 
-    ws.onopen = () => {
-      isRecording = true;
-      overlayConnecting.classList.add('hidden');
+    // Update UI state
+    btnRecord.classList.add('recording');
+    labelRecord.textContent = 'Stop & Transcribe';
+    visualizerCard.classList.add('active-recording');
+    visualizerLabel.textContent = 'Microphone Active • Recording';
 
-      // Update UI state
-      btnRecord.classList.add('recording');
-      labelRecord.textContent = 'Stop Recording';
-      btnExtract.disabled = false;
-      visualizerCard.classList.add('active-recording');
-      visualizerLabel.textContent = 'Microphone Active • Live Stream';
+    updateStatus('recording', 'Recording Consultation...');
 
-      updateStatus('recording', 'Listening & Transcribing...');
+    // Start Session Timer
+    startTime = Date.now();
+    clearInterval(timerInterval);
+    timerInterval = setInterval(updateTimer, 1000);
 
-      // Start Session Timer
-      startTime = Date.now();
-      clearInterval(timerInterval);
-      timerInterval = setInterval(updateTimer, 1000);
-
-      // Setup Web Audio & Visualizer
-      startAudioPipeline(mediaStream);
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        handleServerMessage(data);
-      } catch (err) {
-        console.error('Error parsing server message:', err);
-      }
-    };
-
-    ws.onerror = (err) => {
-      console.error('WebSocket error:', err);
-      updateStatus('error', 'Connection Error');
-    };
-
-    ws.onclose = () => {
-      if (isRecording) {
-        stopRecording(false);
-      }
-    };
+    // Setup Web Audio Pipeline
+    startAudioPipeline(mediaStream);
 
   } catch (err) {
     console.error('Microphone access denied or error:', err);
@@ -168,25 +335,21 @@ async function startRecording() {
   }
 }
 
-function stopRecording(closeWs = true) {
+async function stopRecordingAndTranscribe() {
   isRecording = false;
 
   btnRecord.classList.remove('recording');
-  labelRecord.textContent = 'Start Recording';
+  labelRecord.textContent = 'Processing Audio...';
+  btnRecord.disabled = true;
+
   visualizerCard.classList.remove('active-recording');
   visualizerLabel.textContent = 'Microphone Idle';
   audioMeterFill.style.width = '0%';
   meterDb.textContent = '0%';
 
-  updateStatus('ready', 'Microphone Idle');
   clearInterval(timerInterval);
 
-  if (interimBox) {
-    interimBox.classList.add('hidden');
-    interimText.textContent = '';
-  }
-
-  // Stop Audio Nodes
+  // Stop Audio Hardware
   if (mediaStream) {
     mediaStream.getTracks().forEach(track => track.stop());
     mediaStream = null;
@@ -209,22 +372,134 @@ function stopRecording(closeWs = true) {
   }
   initVisualizerIdle();
 
-  if (closeWs && ws) {
-    ws.close();
-    ws = null;
+  // Combine PCM Chunks and encode to 16kHz Mono WAV
+  const totalLength = recordedAudioChunks.reduce((acc, chunk) => acc + chunk.length, 0);
+  if (totalLength < 1600) { // Less than 0.1s
+    labelRecord.textContent = 'Start Recording';
+    btnRecord.disabled = false;
+    updateStatus('ready', 'Recording too short');
+    return;
+  }
+
+  const merged = new Float32Array(totalLength);
+  let offset = 0;
+  for (const chunk of recordedAudioChunks) {
+    merged.set(chunk, offset);
+    offset += chunk.length;
+  }
+  recordedAudioChunks = [];
+
+  const wavBlob = encodeWav(merged, 16000);
+  await processAudioFile(wavBlob, 'recorded_consultation.wav');
+
+  btnRecord.disabled = false;
+  labelRecord.textContent = 'Start Recording';
+}
+
+// ---------------------------------------------------------------------------
+// Audio File Processing via /api/transcribe_audio
+// ---------------------------------------------------------------------------
+async function processAudioFile(fileOrBlob, filename = 'audio.wav') {
+  updateStatus('recording', 'Transcribing with gemini-3.5-transcribe...');
+
+  const formData = new FormData();
+  formData.append('audio', fileOrBlob, filename);
+
+  try {
+    const res = await fetch('/api/transcribe_audio', {
+      method: 'POST',
+      body: formData,
+    });
+
+    const result = await res.json();
+    if (result.status === 'success') {
+      // Clear welcome message
+      if (welcomeMessage) {
+        welcomeMessage.style.display = 'none';
+      }
+
+      // Reset and display utterances
+      transcriptContainer.innerHTML = '';
+      dialogueHistory = [];
+
+      if (result.utterances && result.utterances.length > 0) {
+        result.utterances.forEach(u => {
+          renderUtteranceCard(u);
+        });
+      }
+
+      // Render clinical summary keywords
+      if (result.data && result.data.keywords) {
+        renderExtractedSummary(result.data.keywords);
+      }
+
+      updateStatus('ready', 'Consultation Transcribed & Extracted');
+      btnExtract.disabled = false;
+
+    } else {
+      console.error('Transcription error:', result.message);
+      alert(`Transcription error: ${result.message || 'Unknown error'}`);
+      updateStatus('error', 'Transcription Failed');
+    }
+  } catch (err) {
+    console.error('Failed to send audio to server:', err);
+    alert('Failed to connect to transcription service: ' + err.message);
+    updateStatus('error', 'Network Error');
   }
 }
 
-function updateTimer() {
-  const elapsed = Math.floor((Date.now() - startTime) / 1000);
-  const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
-  const s = String(elapsed % 60).padStart(2, '0');
-  timerDisplay.textContent = `${m}:${s}`;
+function renderUtteranceCard(u) {
+  const role = (u.role || (u.speaker_label === 'spk:0' ? 'doctor' : 'patient')).toLowerCase();
+  const isDoc = role === 'doctor';
+  const speakerName = isDoc ? 'Dr. Physician' : 'Patient';
+
+  const timeRange = (u.start && u.end) ? `[${formatOffset(u.start)} - ${formatOffset(u.end)}]` : '';
+
+  const card = document.createElement('div');
+  card.className = `utterance-card ${isDoc ? 'doctor' : 'patient'}`;
+
+  card.innerHTML = `
+    <div class="utterance-meta">
+      <div class="speaker-badge-wrap">
+        <span class="speaker-pill">${speakerName}</span>
+        ${timeRange ? `<span class="utterance-time-range">${timeRange}</span>` : ''}
+      </div>
+      <button class="btn-toggle-speaker" title="Switch between Doctor and Patient">
+        Switch Role
+      </button>
+    </div>
+    <div class="utterance-text">${escapeHtml(u.text)}</div>
+  `;
+
+  // Toggle speaker role listener
+  const toggleBtn = card.querySelector('.btn-toggle-speaker');
+  toggleBtn.addEventListener('click', () => {
+    if (card.classList.contains('doctor')) {
+      card.classList.remove('doctor');
+      card.classList.add('patient');
+      card.querySelector('.speaker-pill').textContent = 'Patient';
+    } else {
+      card.classList.remove('patient');
+      card.classList.add('doctor');
+      card.querySelector('.speaker-pill').textContent = 'Dr. Physician';
+    }
+  });
+
+  transcriptContainer.appendChild(card);
+  transcriptContainer.scrollTop = transcriptContainer.scrollHeight;
+
+  dialogueHistory.push({
+    speaker: isDoc ? 'doctor' : 'patient',
+    text: u.text,
+  });
 }
 
-function updateStatus(state, msg) {
-  statusPill.className = `status-pill status-${state}`;
-  statusText.textContent = msg;
+function formatOffset(offsetStr) {
+  if (!offsetStr) return '00:00';
+  const sec = parseFloat(offsetStr.replace('s', '')) || 0;
+  const m = String(Math.floor(sec / 60)).padStart(2, '0');
+  const s = String(Math.floor(sec % 60)).padStart(2, '0');
+  return `${m}:${s}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -240,21 +515,15 @@ function startAudioPipeline(stream) {
   analyserNode.smoothingTimeConstant = 0.8;
   source.connect(analyserNode);
 
-  // ScriptProcessor for PCM Streaming
+  // ScriptProcessor to buffer audio samples
   scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
   source.connect(scriptProcessor);
   scriptProcessor.connect(audioContext.destination);
 
   scriptProcessor.onaudioprocess = (e) => {
-    if (!isRecording || !ws || ws.readyState !== WebSocket.OPEN) return;
-
+    if (!isRecording) return;
     const inputData = e.inputBuffer.getChannelData(0);
-    const pcmData = new Int16Array(inputData.length);
-    for (let i = 0; i < inputData.length; i++) {
-      const s = Math.max(-1, Math.min(1, inputData[i]));
-      pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-    }
-    ws.send(pcmData.buffer);
+    recordedAudioChunks.push(new Float32Array(inputData));
   };
 
   // Start Visualizer Canvas Loop
@@ -340,96 +609,61 @@ function roundRect(ctx, x, y, w, h, r) {
 }
 
 // ---------------------------------------------------------------------------
-// Server Message & Transcript Handler
+// 16kHz Mono WAV Encoder
 // ---------------------------------------------------------------------------
-function handleServerMessage(data) {
-  if (data.type === 'interim_transcript') {
-    if (interimBox && data.text) {
-      interimBox.classList.remove('hidden');
-      interimText.textContent = data.text;
-      transcriptContainer.scrollTop = transcriptContainer.scrollHeight;
-    }
-  } else if (data.type === 'final_transcript') {
-    if (interimBox) {
-      interimBox.classList.add('hidden');
-      interimText.textContent = '';
-    }
-    if (data.text && data.text.trim()) {
-      appendDialogueLine(data.text.trim());
-    }
-  } else if (data.type === 'cleared') {
-    resetDialogueFeed();
+function encodeWav(samples, sampleRate = 16000) {
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buffer);
+
+  // RIFF chunk
+  writeString(view, 0, 'RIFF');
+  view.setUint32(4, 36 + samples.length * 2, true);
+  writeString(view, 8, 'WAVE');
+
+  // fmt chunk
+  writeString(view, 12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // Linear PCM
+  view.setUint16(22, 1, true); // Mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true); // Byte rate
+  view.setUint16(32, 2, true); // Block align
+  view.setUint16(34, 16, true); // 16-bit
+
+  // data chunk
+  writeString(view, 36, 'data');
+  view.setUint32(40, samples.length * 2, true);
+
+  // Write 16-bit PCM audio samples
+  let offset = 44;
+  for (let i = 0; i < samples.length; i++, offset += 2) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+  }
+
+  return new Blob([view], { type: 'audio/wav' });
+}
+
+function writeString(view, offset, string) {
+  for (let i = 0; i < string.length; i++) {
+    view.setUint8(offset + i, string.charCodeAt(i));
   }
 }
 
-function appendDialogueLine(text, forcedSpeaker = null) {
-  if (welcomeMessage) {
-    welcomeMessage.style.display = 'none';
-  }
+function updateTimer() {
+  const elapsed = Math.floor((Date.now() - startTime) / 1000);
+  const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
+  const s = String(elapsed % 60).padStart(2, '0');
+  timerDisplay.textContent = `${m}:${s}`;
+}
 
-  let speaker = forcedSpeaker;
-  let cleanText = text;
-
-  // Detect explicit speaker prefix like "Doctor: ..." or "Patient: ..."
-  if (!speaker) {
-    const lower = text.toLowerCase();
-    if (lower.startsWith('doctor:') || lower.startsWith('dr:')) {
-      speaker = 'doctor';
-      cleanText = text.replace(/^(doctor|dr):/i, '').trim();
-    } else if (lower.startsWith('patient:')) {
-      speaker = 'patient';
-      cleanText = text.replace(/^patient:/i, '').trim();
-    } else {
-      // Heuristic: questions and prescription language typically doctor, symptoms patient
-      const docKeywords = ['prescribe', 'take', 'twice', 'daily', 'mg', 'diagnosis', 'symptom', 'how long', 'fever'];
-      const isDoc = docKeywords.some(kw => lower.includes(kw) && (lower.includes('prescribe') || lower.includes('take') || lower.includes('you should')));
-      speaker = isDoc ? 'doctor' : (speakerSelect ? speakerSelect.value : 'patient');
-    }
-  }
-
-  const now = new Date();
-  const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-
-  const card = document.createElement('div');
-  card.className = `utterance-card ${speaker}`;
-
-  card.innerHTML = `
-    <div class="utterance-meta">
-      <div class="speaker-badge-wrap">
-        <span class="speaker-pill">${speaker === 'doctor' ? 'Dr. Physician' : 'Patient'}</span>
-        <span class="utterance-time">${timeStr}</span>
-      </div>
-      <button class="btn-toggle-speaker" title="Switch between Doctor and Patient">
-        Switch Role
-      </button>
-    </div>
-    <div class="utterance-text">${escapeHtml(cleanText)}</div>
-  `;
-
-  // Toggle speaker listener
-  const toggleBtn = card.querySelector('.btn-toggle-speaker');
-  toggleBtn.addEventListener('click', () => {
-    if (card.classList.contains('doctor')) {
-      card.classList.remove('doctor');
-      card.classList.add('patient');
-      card.querySelector('.speaker-pill').textContent = 'Patient';
-    } else {
-      card.classList.remove('patient');
-      card.classList.add('doctor');
-      card.querySelector('.speaker-pill').textContent = 'Dr. Physician';
-    }
-  });
-
-  transcriptContainer.appendChild(card);
-  transcriptContainer.scrollTop = transcriptContainer.scrollHeight;
-
-  // Add to in-memory dialogue history
-  dialogueHistory.push({ speaker, text: cleanText });
-  btnExtract.disabled = false;
+function updateStatus(state, msg) {
+  statusPill.className = `status-pill status-${state}`;
+  statusText.textContent = msg;
 }
 
 // ---------------------------------------------------------------------------
-// Manual Input & Test Prompt Handling
+// Manual Input & Text Handling
 // ---------------------------------------------------------------------------
 btnSendManual.addEventListener('click', () => submitManualInput());
 manualInput.addEventListener('keydown', (e) => {
@@ -449,18 +683,72 @@ function submitManualInput() {
 
 function addManualDialogue(fullLine, explicitSpeaker = null) {
   appendDialogueLine(fullLine, explicitSpeaker);
+}
 
-  // Also sync with server WebSocket if active
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({
-      type: 'add_text',
-      text: fullLine,
-    }));
+function appendDialogueLine(text, forcedSpeaker = null) {
+  if (welcomeMessage) {
+    welcomeMessage.style.display = 'none';
   }
+
+  let speaker = forcedSpeaker;
+  let cleanText = text;
+
+  if (!speaker) {
+    const lower = text.toLowerCase();
+    if (lower.startsWith('doctor:') || lower.startsWith('dr:')) {
+      speaker = 'doctor';
+      cleanText = text.replace(/^(doctor|dr):/i, '').trim();
+    } else if (lower.startsWith('patient:')) {
+      speaker = 'patient';
+      cleanText = text.replace(/^patient:/i, '').trim();
+    } else {
+      const docKeywords = ['prescribe', 'take', 'twice', 'daily', 'mg', 'diagnosis', 'symptom', 'how long'];
+      const isDoc = docKeywords.some(kw => lower.includes(kw));
+      speaker = isDoc ? 'doctor' : (speakerSelect ? speakerSelect.value : 'patient');
+    }
+  }
+
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+  const card = document.createElement('div');
+  card.className = `utterance-card ${speaker}`;
+
+  card.innerHTML = `
+    <div class="utterance-meta">
+      <div class="speaker-badge-wrap">
+        <span class="speaker-pill">${speaker === 'doctor' ? 'Dr. Physician' : 'Patient'}</span>
+        <span class="utterance-time-range">${timeStr}</span>
+      </div>
+      <button class="btn-toggle-speaker" title="Switch between Doctor and Patient">
+        Switch Role
+      </button>
+    </div>
+    <div class="utterance-text">${escapeHtml(cleanText)}</div>
+  `;
+
+  const toggleBtn = card.querySelector('.btn-toggle-speaker');
+  toggleBtn.addEventListener('click', () => {
+    if (card.classList.contains('doctor')) {
+      card.classList.remove('doctor');
+      card.classList.add('patient');
+      card.querySelector('.speaker-pill').textContent = 'Patient';
+    } else {
+      card.classList.remove('patient');
+      card.classList.add('doctor');
+      card.querySelector('.speaker-pill').textContent = 'Dr. Physician';
+    }
+  });
+
+  transcriptContainer.appendChild(card);
+  transcriptContainer.scrollTop = transcriptContainer.scrollHeight;
+
+  dialogueHistory.push({ speaker, text: cleanText });
+  btnExtract.disabled = false;
 }
 
 // ---------------------------------------------------------------------------
-// Extraction Action (Gemini 3.5 Flash Lite)
+// Manual Extraction Action (Gemini 3.5 Flash Lite)
 // ---------------------------------------------------------------------------
 btnExtract.addEventListener('click', async () => {
   const fullTranscript = compileTranscriptText();
@@ -497,7 +785,6 @@ btnExtract.addEventListener('click', async () => {
 });
 
 function compileTranscriptText() {
-  // Read all utterance cards from DOM
   const cards = transcriptContainer.querySelectorAll('.utterance-card');
   if (cards.length > 0) {
     const lines = [];
@@ -511,8 +798,6 @@ function compileTranscriptText() {
     });
     return lines.join('\n');
   }
-
-  // Fallback to in-memory history
   return dialogueHistory.map(d => `${d.speaker === 'doctor' ? 'Doctor' : 'Patient'}: ${d.text}`).join('\n');
 }
 
@@ -527,6 +812,9 @@ function renderExtractedSummary(keywords) {
       </div>
     `;
     printSymptoms.innerHTML = keywords.symptoms.map(s => `• ${escapeHtml(s)}`).join('<br>');
+  } else {
+    symptomsContainer.innerHTML = '<p class="empty-state">No symptoms reported.</p>';
+    printSymptoms.innerHTML = 'None reported';
   }
 
   // 2. Duration
@@ -534,6 +822,10 @@ function renderExtractedSummary(keywords) {
     textDuration.textContent = keywords.duration;
     textDuration.classList.remove('empty-state');
     printDuration.textContent = keywords.duration;
+  } else {
+    textDuration.textContent = 'Not specified';
+    textDuration.classList.add('empty-state');
+    printDuration.textContent = 'Not specified';
   }
 
   // 3. Diagnosis / Root Cause
@@ -541,6 +833,10 @@ function renderExtractedSummary(keywords) {
     textDiagnosis.textContent = keywords.root_cause;
     textDiagnosis.classList.remove('empty-state');
     printDiagnosis.textContent = keywords.root_cause;
+  } else {
+    textDiagnosis.textContent = 'None explicitly diagnosed';
+    textDiagnosis.classList.add('empty-state');
+    printDiagnosis.textContent = 'None explicitly diagnosed';
   }
 
   // 4. Prescriptions
@@ -561,9 +857,12 @@ function renderExtractedSummary(keywords) {
 
     printPrescriptions.innerHTML = keywords.prescriptions.map(p => `
       <div class="print-rx-item">
-        <strong>${escapeHtml(p.drug)}</strong> — ${escapeHtml(p.dose)} (${escapeHtml(p.frequency)})
+        <strong>${escapeHtml(p.drug)}</strong> — ${escapeHtml(p.dose || '')} (${escapeHtml(p.frequency || '')})
       </div>
     `).join('');
+  } else {
+    prescriptionsContainer.innerHTML = '<p class="empty-state">No prescriptions issued.</p>';
+    printPrescriptions.innerHTML = 'None issued';
   }
 
   // 5. Advice / Next Steps
@@ -573,8 +872,10 @@ function renderExtractedSummary(keywords) {
         ${keywords.advice.map(a => `<li>${escapeHtml(a)}</li>`).join('')}
       </ul>
     `;
-
     printAdvice.innerHTML = keywords.advice.map(a => `✔ ${escapeHtml(a)}`).join('<br>');
+  } else {
+    adviceContainer.innerHTML = '<p class="empty-state">No specific advice given.</p>';
+    printAdvice.innerHTML = 'None';
   }
 }
 
@@ -583,13 +884,9 @@ function renderExtractedSummary(keywords) {
 // ---------------------------------------------------------------------------
 btnClear.addEventListener('click', async () => {
   if (confirm('Clear the current consultation dialogue and clinical summary?')) {
-    if (isRecording) {
-      stopRecording();
-    }
     dialogueHistory = [];
     resetDialogueFeed();
 
-    // Call server clear endpoint
     try {
       await fetch('/api/clear_transcript', { method: 'POST' });
     } catch (err) {
@@ -608,7 +905,7 @@ function resetDialogueFeed() {
   timerDisplay.textContent = '00:00';
 
   // Reset summary cards
-  symptomsContainer.innerHTML = '<p class="empty-state">No symptoms extracted yet. Record dialogue and click "Extract Summary".</p>';
+  symptomsContainer.innerHTML = '<p class="empty-state">No symptoms extracted yet. Record or upload dialogue to extract.</p>';
   textDuration.textContent = 'Not specified';
   textDuration.classList.add('empty-state');
   textDiagnosis.textContent = 'Awaiting extraction';
@@ -621,7 +918,6 @@ function resetDialogueFeed() {
 // Print / Export PDF Action
 // ---------------------------------------------------------------------------
 btnPrint.addEventListener('click', () => {
-  // Populate print date and reference
   const now = new Date();
   printDate.textContent = now.toLocaleDateString() + ' ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   printRef.textContent = 'SH-MED-' + Math.floor(100000 + Math.random() * 900000);
@@ -637,3 +933,4 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
 }
+
